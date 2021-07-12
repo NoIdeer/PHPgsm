@@ -30,12 +30,17 @@
 error_reporting( -1 );
 define('cr',PHP_EOL);
 define ('VERSION',2.13);
+	$build = "13883-2154975256";
 require ('includes/master.inc.php');
 require 'includes/class.emoji.php';
 require 'includes/class.steamid.php';
-if (strtolower($argv[1]) == 'v') {
-	echo 'Scanlog version '.VERSION.cr;
-	exit;
+if(isset($argv[1])){
+	switch (strtolower($argv[1])) {
+		case 'v':
+		case '-v':
+		echo 'Scanlog V'.VERSION.' - '.$build.' © NoIdeer Software '.date('Y').cr;
+		exit;
+	}
 }
 if (empty( $settings['ip_key'] )) {
 	echo 'Fatal Error - api key missing'.cr;
@@ -47,7 +52,7 @@ echo 'wrong enviroment';
 exit;
 }
 if(empty($argv[1])) {
-	echo 'Scanlog V'.VERSION.' © NoIdeer Software '.date('Y').cr;
+	echo 'Scanlog V'.VERSION.' - '.$build.' © NoIdeer Software '.date('Y').cr;
 	echo 'Please supply a Server to scan'.cr;
 	echo 'Examples :- '.cr."\t".$argv[0].' <server id>'.cr;
 	echo "\t".$argv[0].' <server id> <file to scan>'.cr;
@@ -211,7 +216,8 @@ if (!isset($la)) {
 if ( $pc == 0 ) {
 	//echo "\t Nothing to do".cr;
 	if ($uds == true) {
-		update_server($server);
+		$s = update_server($server);
+		return $s;
 	}
 return;
 }
@@ -241,7 +247,7 @@ foreach ($la as $user_data) {
 		if ($last_logon >  $result['last_log_on']) {
 			$result['last_log_on'] = $last_logon;
 			$result['log_ons'] ++;
-			$ut.= ' new logon (total '.$result['log_ons'].')';
+			$ut.= ' new logon  at '.$user_data['time'].' (total '.$result['log_ons'].')';
 			$modify=true;
 			$logon = true;
 		}
@@ -347,7 +353,7 @@ foreach ($la as $user_data) {
 	    $user_stub ="\t".$username.' ('.$result['country'].') ';
 	    if ($in === true ){
 			 	 $done++;
-			 	 $ut .=' Record added'.cr;
+			 	 $ut .=' Record added at '.$user_data['time'].cr;
 			 	 $sql = 'call update_logins ('.$result['steam_id64'].',"'.$server.'",'.$result['last_log_on'].')';
 			 	 //$ut .= $sql.cr;
 			 	 $database->query($sql);
@@ -379,7 +385,7 @@ if ($uds == true) {
 	$rt .= cr.'Warning '.$server.' needs updating & restarting'.cr;
 	$rt .= update_server($server);
 }
-$rt .= cr.'Processed '.$server.cr.cr;
+$rt .= cr.'Processed '.$server.cr;
 //echo $rt;
 return $rt;
 }
@@ -400,7 +406,7 @@ function get_ip_detail($ip) {
 function update_server($server){
 	// if found stop the server and update
 	//Your server needs to be restarted in order to receive the latest update.
-	global $database, $update_done;
+	global $database, $update_done,$settings;
 	$s = 'Server Update via Scanlog '.VERSION.cr;
 	$sql = 'select * from server1 where host_name="'.$server.'"';
 	$steamcmd = '/usr/games/steamcmd';
@@ -408,27 +414,28 @@ function update_server($server){
 	$stub =  $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exescreen&server='.$game['host_name'].'&key='.md5($game['host']).'&cmd='; // used to start & stop
 	if (in_array($game['install_dir'],$update_done)) {
 				$s .= 'Update already done'.cr;
-			    $cmd = $stub.'r';
-			    $s .=  file_get_contents($cmd).cr; 	
+			    //$cmd = $stub.'r';
+			    //$s .=  file_get_contents($cmd).cr; 	
 				return $s;
 			}
 	$cmd = $stub.'q';
 	$s .= file_get_contents($cmd).cr; // stopped server
-	//echo 'stop server using '.$cmd.cr;
-		    //$exe = urlencode ('scanlog.php '.$game['host_name'].' '.$game['location'].'/log/console/'.$game['host_name'].'-console.log');
-			//$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
-			//$result = file_get_contents($cmd);
-			//if (!$result == 0) {
-				//echo $result.cr;
-			//} // scanned the log
+	
 	$exe = urlencode($steamcmd.' +login anonymous +force_install_dir '.$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
 	$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 	$s .=file_get_contents($cmd);
 	//echo 'updated server using '.$cmd.cr;
-	$cmd = $stub.'s';
-	$s .= file_get_contents($cmd).cr;
-	//echo 'start server using '.$cmd.cr;
-	
+	//$cmd = $stub.'s';
+	//$s .= file_get_contents($cmd).cr;
+	//need to restart all that stem from this install dir
+	$sql = "SELECT * FROM `server1` WHERE `game` like '".$game['game']."' and `install_dir` like '".$game['install_dir']."'";
+		$restarts = $database->get_results($sql);
+		foreach ($restarts as $restart) {
+			// restart them all
+			$cmd =  $game['url'].':'.$restart['bport'].'/ajaxv2.php?action=exescreen&server='.$restart['host_name'].'&key='.md5($restart['host']).'&cmd=r'; // used to restart
+			$s .= file_get_contents($cmd).cr;
+		}
+		
 	$update_done[] = $game['install_dir'];
 	return $s;
 }

@@ -3,10 +3,12 @@
 define ('cr',PHP_EOL);
 define ('br','<br>');
 define('DOC_ROOT', dirname(__FILE__,2));
+	$build = "11322-2734911782";
+include DOC_ROOT.'/includes/master.inc.php';
 include 'includes/functions.php';
 include 'includes/class.color.php';
 include 'includes/class.table.php';
-$cc = new Console_Color2();
+$cc = new Color();
 define('version',1.01);
 $os = lsb();
 if ($os['ID_LIKE'] !== 'debian') {
@@ -18,6 +20,10 @@ if (is_file('/var/run/reboot-required') === true) {
 			echo "\t".$cc->convert("%rThis machine requires a restart%n").cr;
 			$rb = ask_question('Restart now ? ','y','n');
 		}
+if(!is_cli()) {
+	echo 'Wrong Enviroment';
+	exit;
+}		
 if (!isset($argv[1])) {
 	echo cr;
 	echo $cc->convert("%rCommand Option Missing%n").cr;
@@ -29,12 +35,12 @@ if (!isset($argv[1])) {
 	echo cr;
 	exit;
 }
-echo "argv $argv[1]".cr;
+//echo "argv $argv[1]".cr;
 
 switch (strtolower($argv[1])) {
 	case '-v':
 	case 'v' :
-		echo 'Install - '.version.' '.$os['PRETTY_NAME'].cr;
+		echo 'Install - '.version.' '.$build.' '.$os['PRETTY_NAME'].cr;
 		exit;
 	case '-h' :
 	case 'h' :
@@ -83,7 +89,7 @@ $req = $cc->convert("%gRequired%n");
 $rreq = $cc->convert("%rRequired%n");
 $opt = $cc->convert("%yOptional%n");
 $ropt = $cc->convert("%rOptional%n");
- $table = new Console_Table(
+ $table = new Table(
     CONSOLE_TABLE_ALIGN_LEFT,
     array('horizontal' => '', 'vertical' => '', 'intersection' => '')
 );
@@ -258,10 +264,10 @@ echo cr;
 $answer = strtoupper(ask_question('press (I)nstall (S)kip (Q)uit  ',null,null));
 echo "the answer is $answer".cr;
 if (is_file(DOC_ROOT.'/includes/config.php')) {
-	//db_config(1);
+	db_config(1);
 }
 else {
-		//db_config(0);
+		db_config(0);
 	}
 	
 	
@@ -269,19 +275,23 @@ function db_config($action) {
 	if ($action == 1) {
 		echo cr.cr;
 		ask_question('We have configuration for the database connection continue with reconfigure ? ',null,null,false);
+		$configfile = DOC_ROOT.'/includes/config.php'; 
+		include $configfile;
+		print_r($config);
 	}
 	else {
 		echo 'do config thingy'.cr;
 		$sqlfile = 'data/structure.sql'; 
+		echo file_get_contents($sqlfile);
 	}
 }
 function lgsm() {
-	$table = new Console_Table(
+	$table = new Table(
     CONSOLE_TABLE_ALIGN_LEFT,
     array('horizontal' => '', 'vertical' => '', 'intersection' => '')
 );
 	$table->setHeaders(array('PHPgsm support for LGSM' ,' ','','',''));
-	$cc = new Console_Color2();
+	$cc = new Color();
 	
 	system('clear');
 	echo 'Setting up PHPgsm to work with LGSM'.cr;

@@ -23,34 +23,45 @@
  * 
  */
 $run_path = dirname($_SERVER['PHP_SELF'],2); // these guys should be in the dir above
+echo $run_path.PHP_EOL;
 exec('cat /proc/mounts |grep gvfsd-fuse',$tmp,$rval);
 if ($tmp) {
 $tmp =explode(' ',$tmp[0]);
 $installing['gvfs'] = trim($tmp[1]);
 }
-clean_up();
-echo $run_path.PHP_EOL;
-if ($run_path == '.') { $run_path = '..';} // opps perhaps not
-// test the file is in PHPgsm location 
-
- include $run_path.'/includes/master.inc.php';
- include DOC_ROOT.'/functions.php';
+echo 'Entering cleanup'.PHP_EOL;
+clean_up('file');
+echo 'done cleanup'.PHP_EOL;
+if (!defined('DOC_ROOT')) {
+	define('DOC_ROOT',dirname(__DIR__));
+}
+ require_once DOC_ROOT.'/includes/master.inc.php';
+ require_once DOC_ROOT.'/functions.php';
  define ('cr',PHP_EOL);
  define('CR',cr);
  define ('VERSION',2.02);
+	$build = "23736-4092689013";
  define ('quit','<ctl-c> to quit ');
-    require_once 'includes/table.php';
-    require_once 'includes/color.php';
-$cc = new Console_Color2();
+  echo 'defines done'.cr;
+    require_once DOC_ROOT.'/includes/class.table.php';
+    require_once DOC_ROOT.'/includes/class.color.php';
+    echo 'tables done'.cr;
+$cc = new Color();
 $tick = $cc->convert("%g✔%n");
 $cross = $cc->convert("%r✖%n");
  define ('green_tick',$tick);
  define ('red_cross',$cross);
+ define ('warning',$cc->convert("%RWarning %n"));
+ define ('error',$cc->convert("%RError %n"));
  $cmds =convert_to_argv($argv,"",true);
  $steam_i = false;
  system('clear');
+  $table = new Table(
+    CONSOLE_TABLE_ALIGN_RIGHT,
+    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
+);
  $quit ='(ctl+c to quit) '; 
-  echo 'Welcome to PHPgsm Game Installer '.VERSION.cr;
+  echo 'PHPgsm Game Installer '.VERSION.cr;
   if (isset($cmds)){
   if ($cmds['action'] == 'show') { 
 	  list_games();
@@ -59,26 +70,34 @@ $cross = $cc->convert("%r✖%n");
 	  if (!$rerun) { exit;}
   }
 }
- echo 'Checking available disk space'.cr;
+//$table->addRow(array('','',''));
+$table->addRow(array('Mount Point','Free Space' ));
+ echo 'Available disk space'.cr;
  $diskinfo = get_disk_info();
  if (isset($diskinfo['boot_free'])) {
-	 echo $diskinfo['boot_mount'].' ( '.$diskinfo['boot_free'].' free )'.cr;
+	 //echo $diskinfo['boot_mount'].' ( '.$diskinfo['boot_free'].' free )'.cr;
+	 $table->addRow(array($diskinfo['boot_mount'],$diskinfo['boot_free']));
+	 
  }
  if(isset($diskinfo['home_free']))  {
-	 echo $diskinfo['home_mount'].' ( '.$diskinfo['home_free'].' free )'.cr;
+	 //echo $diskinfo['home_mount'].' ( '.$diskinfo['home_free'].' free )'.cr;
+	 $table->addRow(array($diskinfo['home_mount'],$diskinfo['home_free']));
 	 }
- 
+ echo $table->getTable();
  if(!root()) {
  echo 'Checking user capabilities';
  $user = get_user_info($diskinfo);
- //print_r($user);
+// print_r($user);
  if($user['level'] == 1 || root()) {$user_level = ', Privilege OK';}
- else { $user_level =', user privilege to low, get an administrator to run this script.'; echo $user_level.cr;exit;}
+ else { $user_level =', '.warning.' user privilege level low, the installer will run in safe mode.'; }
  echo $user_level.cr;
- $installing['base_user'] = $user['name'];
+ $installing  = array_merge($user, $diskinfo);
+
 }
 else {
 	//
+	$user = get_user_info($diskinfo);
+	$installing = $user; 
 	echo 'Hi Root, you need to supply a valid user and group for the install,'.cr;
 	echo 'However if you are doing an install that you control & your users are symlinked to the install, enter root as the user'.cr.cr;
 	$answer = trim(ask_question('enter target user '.quit,NULL,NULL)); 
@@ -96,13 +115,14 @@ else {
  if ($steam_i) {$question = 'Please Enter The Steam Id of the Game Server to install ';}
  else { $question = 'Please Enter The Steam Id of the Game Server to install or C for non steam or ';}
  $answer = trim(ask_question($question.quit,NULL,$n)); 
-
+//echo print_r($user,true).cr;
+//die();
  if (is_numeric($answer)) {
 	 rerun:
-	 echo 'Please wait checking steam for server ID '.$answer;//.cr;
-	 exec($run_path.'/utils/check_r.php '.$answer,$output,$ret_val);
+	 echo 'Please wait checking steam for server ID '.$answer.cr;
+	 exec(DOC_ROOT.'/utils/check_r.php '.$answer,$output,$ret_val);
 	 $x=0;
-	 echo $ret_val.cr;
+	 //echo $ret_val.cr;
 	 switch ($ret_val) {
 		 case 7:
 		 //echo $output[1].cr;
@@ -116,16 +136,68 @@ else {
 		 if ($rerun) {$ret_val=0; $output = array(); goto rerun;} 
 		 exit;
 	 }
+	
 	 //echo $ret_val.cr;
 	 //print_r($output);
 	 //stage 1
-	 echo $output[1].cr;
+	 
 	 	 
 	 $installing['app_id'] = trim($answer);
 	 $name = str_replace('Found ','',$output[1]);
 	 $server = trim(str_replace('(released)',' ',$name));
+ 	 $installing['disk_size'] = str_replace('Size on disk ','',$output[3]);
+ 	 if (strpos($installing['disk_size'],'MB')){
+		 echo 'install less than a gig ! '.$installing['disk_size'].cr;
+		$installing['disk_size'] = number_format(floatval($installing['disk_size'])/1000,2) .'G';
+		// exit;
+	 }
+        //echo cr.print_r($installing).cr;
+       
+	 $cmd = 'locate -e appmanifest_'.$installing['app_id'].'.acf';
+	 //echo $cmd.cr;	
+     exec($cmd,$g_locate,$ret);
+     //echo 'locations '.print_r($g_locate,true).cr;
+     if (count($g_locate)) {
+		 $table = new Table(
+			CONSOLE_TABLE_ALIGN_LEFT,
+			array('horizontal' => '', 'vertical' => '', 'intersection' => '')
+			);
+			echo $server.' installed at these locations'.cr; 
+			$table->addRow(array('Location',"  Size on disk"));
+		 foreach ($g_locate as $ins) {
+			 $loc = dirname($ins,1);
+			 exec('du -hs '. dirname($ins,2),$dir_size,$r);
+			 $ds=explode("\t",$dir_size[0]);
+			 //echo '$ds = '.print_r($ds,true).cr;
+			 
+			 $table->addRow(array(dirname($ins,2),"\t".$ds[0]));
+			 unset($dir_size);
+		 }
+		 echo $table->getTable(); 
+	 }
+	 else {
+		echo $output[1].cr;
+	}
+	  if ($installing['disk_size'] >= $installing['quota_free']) {
+			 $table = new Table(
+			CONSOLE_TABLE_ALIGN_RIGHT,
+			array('horizontal' => '', 'vertical' => '', 'intersection' => '')
+			);
+		$game_size = floatval($installing['disk_size']);
+		$remaining = floatval($installing['quota_free']);
+		$need = $game_size -$remaining;
+        echo  error.' '.$server.' can not be installed, not enough disk space !'.cr;
+        $table->addRow(array('Required Disk Space:',trim($game_size.' GB')));
+        $table->addRow(array('Free Disk Space:',trim($remaining.' GB')));
+        $table->addRow(array('Free up at least:',$need.' GB',' to install'));
+		//echo 'Required Disk Space: '.$installing['disk_size'].cr;
+		//echo 'Actual Disk Space: '.$installing['quota_free'].cr;
+		//echo 'Free up at least: '.$need.' GB to install'.cr;
+		echo $table->getTable(); 
+		exit;
+}
 	 $name = $server.' (y/n)';
-	 $installing['name'] = trim($server);
+	 $installing['g_name'] = trim($server);
 	 echo cr;
     $answer = ask_question('Do you want to install '.trim($name).' ? ','y','n');
 	//echo $answer.cr;
@@ -181,28 +253,31 @@ foreach ($list as $temp ) {
  function stage_1($data) {
 	 // add stage 1 game branch
 	 global $output;
+	 
 	 system('clear');
+	 
 		redobranch:
-			echo 'Installing '.$data['name'].' Stage 1: Choose Branch'.cr.cr;
+			echo 'Installing '.$data['g_name'].' Stage 1: Choose Branch'.cr;
+			echo 'Approximate Disk usage '.$data['disk_size'].' Free disk space '.$data['quota_free'].cr.cr;
 		$x=0;
 			 foreach ($output as $line) {
-				if ($x < 3) {
+				if ($x < 4) {
 					$x++;
 					continue;
 					}
 					echo $line.cr;
 				}
 				echo cr.'DO NOT choose a passworded branch, unless you have a valid key & password'.cr;
-		$answer = ask_question('Choose a branch from the list above, press Enter for default or '.quit,NULL,'n',true);
+		$answer = ask_question('Choose a branch from the list above, press Enter for default or '.quit,NULL,null);
 		$answer=trim($answer); 
 		if ($answer =='') {
-			$branch = 5;
+			$branch = 6;
 		}
 		else {
 			$branch = array_search_partial($output, $answer).cr;
 		}
 		
-		if ($branch < 4) {
+		if ($branch < 5) {
 			system('clear');
 			echo 'Could not find a branch called \''.$answer.'\' retry '.cr; 
 			goto redobranch;
@@ -211,15 +286,18 @@ foreach ($list as $temp ) {
 		$tmp = explode('     ',trim($output[$branch]));
 		$tmp = tidy_array($tmp);
 		$data['branch'] = $tmp[0];
-		if(isset($tmp[3])) {$data['password'] = true;}
-		else {$data['password'] = false;}
+		if(isset($tmp[3])) {
+			//$data['password'] = true;
+			$data['branch_password'] = ask_question(cr."Enter Branch Password or ".quit,null,null);
+			}
+		//else {$data['password'] = false;}
 		return $data;
 }
  
  function stage_2($data) {
 	 // add stage 2 location
 	 top:
-	 $table = new Console_Table(
+	 $table = new Table(
     CONSOLE_TABLE_ALIGN_LEFT,
     array('horizontal' => '', 'vertical' => '', 'intersection' => '')
 );
@@ -227,16 +305,19 @@ foreach ($list as $temp ) {
 $table->addRow(array('','',''));
 $table->addRow(array('Branch Selected',$data['branch'] ,green_tick));
 	 system('clear');
-	 echo 'Installing '.$data['name'].' Stage 2: choose location'.cr;
+	 echo 'Installing '.$data['g_name'].' Stage 2: choose location'.cr;
+	 echo 'Approximate Disk usage '.$data['disk_size'].cr.cr;
 	 echo $table->getTable();
 	$appinstalled = '';
 	 
 	  $maxlen = strlen($data['branch']);
 	  $lmask = "%20.20s %-".$maxlen.".".$maxlen."s  %4.4s\n";
 	  //printf($lmask,'Branch Selected',$data['branch'],green_tick);
+		echo 'Current Location '.getcwd ( ).cr;
 		echo 'adding a location that does not start with a \'/\' will create a location below the current location'.cr.cr;
-		$path = ask_question('Enter the path to install '.$data['name'].' enter for current directory or '.quit.' ',NULL,NULL);
-		$path = trim(str_replace('~/',exec('echo ~').'/',$path));
+		$path = ask_question('Enter the path to install '.$data['g_name'].' enter for current directory or '.quit.' ',NULL,NULL);
+		$full_home = exec('echo ~');
+		$path = trim(str_replace('~/',$full_home.'/',$path));
 		if(empty($path)) {
 									$data['path'] = getcwd();
 								}
@@ -260,8 +341,8 @@ $table->addRow(array('Branch Selected',$data['branch'] ,green_tick));
 					}
 				   }   
 					if($appinstalled) {
-						echo cr.$data['name'].' is already installed at this location'.cr;
-						$answer = ask_question( 'Do you want to validate '.$data['name'].' ?  y/n '.quit,'y','n'); 
+						echo cr.$data['g_name'].' is already installed at this location'.cr;
+						$answer = ask_question( 'Do you want to validate '.$data['g_name'].' ?  y/n '.quit,'y','n'); 
 						if ($answer) {
 							echo 'validate'.cr;
 							$data['validate'] = true;
@@ -287,7 +368,7 @@ $table->addRow(array('Branch Selected',$data['branch'] ,green_tick));
 					return $data;
 					} 
 			} else {
-				$answer = ask_question(cr.$data['name'].' will be installed to '.trim($data['path']).cr.cr.' press enter to continue or '.quit,NULL,NULL,true);
+				$answer = ask_question(cr.$data['g_name'].' will be installed to '.trim($data['path']).cr.cr.' press enter to continue or '.quit,NULL,NULL,true);
 				return $data;
 		}
  }
@@ -296,7 +377,7 @@ $table->addRow(array('Branch Selected',$data['branch'] ,green_tick));
 	 // part 3
 	 
 	 top:
-	  $table = new Console_Table(
+	  $table = new Table(
     CONSOLE_TABLE_ALIGN_LEFT,
     array('horizontal' => '', 'vertical' => '', 'intersection' => '')
 );
@@ -306,7 +387,7 @@ $table->addRow(array('Branch Selected',$data['branch'] ,green_tick));
 $table->addRow(array('Install Location',$data['path'] ,green_tick));
 	 system('clear');
 	 //print_r($installing);
-	 echo 'Installing '.$data['name'].' Stage 3: User & Password'.cr;
+	 echo 'Installing '.$data['g_name'].' Stage 3: User & Password'.cr;
 	 echo $table->getTable();
 	
 	 
@@ -343,7 +424,7 @@ $table->addRow(array('Install Location',$data['path'] ,green_tick));
 function stage_4($data) {
 	// stage 4
 	 top:
-	 	 $table = new Console_Table(
+	 	 $table = new Table(
     CONSOLE_TABLE_ALIGN_LEFT,
     array('horizontal' => '', 'vertical' => '', 'intersection' => '')
 );
@@ -362,9 +443,9 @@ if(empty($data['steam_password'])) {
 	 }
 	 system('clear');
 	 //print_r($installing);
-	 echo 'Installing '.$data['name'].' Stage 3: User & Password'.cr;
+	 echo 'Installing '.$data['g_name'].' Stage 4: User & Password'.cr;
 	 echo $table->getTable();
-	 echo 'Review the information, if everything is correct press enter to install '.$data['name'].cr.cr;	
+	 echo 'Review the information, if everything is correct press enter to install '.$data['g_name'].cr.cr;	
 	 // use printf
 	 
 			$steam_user = trim(ask_question(cr.'Press enter to continue or '.quit,NULL,NULL,true));
@@ -375,8 +456,8 @@ function stage_5($data)  {
 	// do steamcmd
 	top:
 	system('clear');
-	 echo 'Installing '.$data['name'].' Stage 5: Installation'.cr.cr;
-	 echo 'This process may take some time, the installer may appear to hang with the prompt \'waiting for steamcmd\''.cr;
+	 echo 'Installing '.$data['g_name'].' Stage 5: Installation'.cr.cr;
+	 echo 'This process may take some time, the installer may appear to hang with the prompt \'waiting for steamcmd to start\''.cr;
 	 echo 'this normally indicates either steamcmd is updating itself or steamcmd is having a problem connecting to steam\'s servers'.cr.cr;
 	 $cmd = 'screen -L -Logfile install.log -dmS install';
 	 exec ($cmd,$screen,$retval);
@@ -397,44 +478,96 @@ else {
 		
          $scmd = 'screen -S install -p 0  -X stuff "'.$cmd.'^M"';
          exec ($scmd); // get steamcmd running
-         sleep (1); // wait for ps
-	
-     $ps = shell_exec('ps -el | grep steamcmd');
-	 $psa = tidy_array(explode(' ',$ps)); // ps data including the pid
-      if (isset($psa[3])) {
-         $pid = $psa[3];
-         $oldline= '';
-	     echo 'Waiting for steamcmd to start'.cr;
-         while (file_exists( "/proc/$pid" )){
+        echo 'Waiting for steamcmd to start'.cr;
+		$pidof = '';
+		while( $pidof == '') {
+			$pidof = trim(shell_exec('pidof steamcmd'));
+		}
+	 
+      if (isset($pidof)) {
+           $oldline= '';
+	       //echo "pidof = $pidof".cr;
+         while (isset($pidof)){
 			$file = "install.log";
 			$fdata = file($file);
+			//echo "pidof = $pidof".cr;
+			$dm = array_search($oldline, $fdata);
+			$c = count($fdata)-1;
+			/* if ($dm < $c and $c >= 0 ){
+						// line
+						//echo "$dm/$c".cr;
+						$output = array_slice($fdata, $dm+1);
+						//echo print_r($output,true).cr;
+						foreach ($output as $vx) {
+							$tmp = str_replace('(','',trim($vx));
+							$tmp = str_replace(')','',$tmp);
+							$steamlog = tidy_array(explode(' ',$tmp));
+							//echo print_r($steamlog,true).cr;
+							if (isset($steamlog[3])) {  
+						$downloading = $steamlog[3].' '. $data['g_name'];
+						$dl = strlen($downloading); // server length
+						$mask = "%".$dl.".".$dl."s %25.25s %-40s \n";
+						
+						if (isset($steamlog[6])) {
+							$current =  floatval($steamlog[6]);
+							$percent = $steamlog[5].'%';
+							$current = formatBytes($current,2);
+							$total =  formatBytes(floatval($steamlog[8]),2);
+							printf($mask,$downloading,"$current out of $total","$steamlog[4] $percent");
+						}
+						//$oldline =$line;
+					    }
+						} 
+					} */
+			
 			if (isset($fdata[count($fdata)-1])) {
+				if ($dm < $c ){
+						// line
+						//echo "$dm/$c".cr;
+					}
+					 
 				$line = $fdata[count($fdata)-1];
+				
 				if (strpos($line,cr)) {
+					
 					if ($line  != $oldline) { 
+						
 						$tmp = str_replace('(','',trim($line));
 						$tmp = str_replace(')','',$tmp);
 						$steamlog = tidy_array(explode(' ',$tmp));
 						if (isset($steamlog[3])) {  
-						$downloading = $steamlog[3].' '. $data['name'];
+						$downloading = $steamlog[3].' '. $data['g_name'];
 						$dl = strlen($downloading); // server length
 						$mask = "%".$dl.".".$dl."s %25.25s %-40s \n";
-						$current =  floatval($steamlog[6]);
-						$percent = $steamlog[5].'%';
-						$current = formatBytes($current,2);
-						$total =  formatBytes(floatval($steamlog[8]),2);
-						printf($mask,$downloading,"$current out of $total","$steamlog[4] $percent");
+						
+						if (isset($steamlog[6])) {
+							$current =  floatval($steamlog[6]);
+							$percent = $steamlog[5].'%'.' '.$dm.' '.$c;
+							$current = formatBytes($current,2);
+							$total =  formatBytes(floatval($steamlog[8]),2);
+							printf($mask,$downloading,"$current out of $total","$steamlog[4] $percent");
+						}
 						$oldline =$line;
 					    }
 					}
+					
 				}
 			}
+			
+			$pidof = trim(shell_exec('pidof steamcmd'));
+			if ($pidof == '') {
+				
+				unset($pidof);
+			}
+			
 		 }
+		
 	 }
 	 
     $cmd = 'screen -X -S install -p 0 -X stuff "exit^M"';
     if (isset ($data['gvfs'])) {	$lsofcmd = 'lsof -e '.$data['gvfs'].' install.log';}
     else { $lsofcmd = 'lsof install.log';}
+    
 		$lsof = trim(shell_exec($lsofcmd));
    
     exec($cmd); //clear up the install terminal
@@ -442,14 +575,14 @@ else {
 	 while ($lsof) {
 		 $lsof = trim(shell_exec($lsofcmd));
 		 }
-	$log =explode(PHP_EOL,file_get_contents('install.log'));
+	$log =explode(PHP_EOL,trim(file_get_contents('install.log')));
 	$line= trim($oldline);
 	$unread = false;
 	 foreach ($log as $a) {
 		if ($unread ) {
 			$p1 = strpos($a, 'Success!');
 				if ($p1 !== false) {
-					$finish = "\e[38;5;82mSuccess\e[0m,".$data['name']." is fully installed at ".$data['path']."\e[0m";
+					$finish = "\e[38;5;82mSuccess\e[0m,".$data['g_name']." is fully installed at ".$data['path']."\e[0m";
 					//echo $finish.cr;
 					//echo 'yippee'.cr;
 					$data['success'] = true;
@@ -461,7 +594,7 @@ else {
 						$tmp = str_replace(')','',$tmp);
 						$steamlog = tidy_array(explode(' ',$tmp));
 						if (isset($steamlog[3])) {  
-						$downloading = $steamlog[3].' '. $data['name'];
+						$downloading = $steamlog[3].' '. $data['g_name'];
 						$dl = strlen($downloading); // server length
 						$mask = "%".$dl.".".$dl."s %25.25s %-40s \n";
 						$current =  floatval($steamlog[6]);
@@ -471,6 +604,7 @@ else {
 						printf($mask,$downloading,"$current out of $total","$steamlog[4] $percent");
 						}
 						else {
+							echo print_r($log,true).cr;
 							echo "$a blank ?".cr;
 						}
 					}
@@ -489,31 +623,39 @@ return $data;
 	 // configure
 	 exec('du -hs '.$data['path'],$du,$ret);
 	 $x = strpos($du[0],'/');
-	 $name = $data['name'];
+	 $name = $data['g_name'];
 	 $path = $data['path'];
 	 $dir_size = trim(substr($du[0],0,$x-1));
 	 top:
 	 system('clear');
-	 echo 'Installing '.$data['name'].' Stage 6: Configure Server'.cr.cr;
-     echo "$name is installed at $path and has used $dir_size of disk space ".green_tick.cr; 	
+	 echo 'Installing '.$data['g_name'].' Stage 6: Configure Server'.cr.cr;
+     echo "$name is installed at $path and has used $dir_size of disk space ".green_tick.cr;
+     if(isset($data['host'])) { 
+		 	 echo "Host Name set to ".$data['host'].' '.green_tick.cr;
+		 }
 	 echo "Let's configure your server for use".cr;
+	 if (!isset($data['host'])) {
 	 $host = ask_question('Server Host Name ',NULL,NULL,false);
 	 if (trim($host) =='') {
 		 echo 'not a good idea to have a blank host name !'.cr.'Let\'s try again';
 		 sleep (3);
 		 goto top;
 	 }
+	 
 	 // host name set 
-	 $config['host']  = trim($host);
+	 $data['host']  = trim($host);
+	 goto top;
+	}
 	 $rcon_password = ask_question('Enter a password for RCON or leave blank for a generated password ',NULL,NULL,false,true);
 	 if (empty(trim($rcon_password))) {
-		 $config['rcon'] = randomPassword();
+		 $data['rcon'] = randomPassword();
 	 }
 	 else {
-		 $config['rcon'] = $rcon_password;
+		 $data['rcon'] = $rcon_password;
 	 }
 	 echo cr; 
-	 print_r($config);	 
+	 echo print_r($data,true).cr;
+	 	 
  }
  
  
@@ -573,8 +715,9 @@ function check_acf ($path) {
 return $x;
 }	 
 
-function clean_up() {
+function clean_up($action) {
 	// did it crash ?
+	if ($action =='file') {
 	if(is_file('install.log')) {
 		unlink('install.log');
 	}
@@ -583,6 +726,16 @@ function clean_up() {
 		// we have an unwanted screen
 		$cmd = 'screen -X -S install -p 0 -X stuff "exit^M"';
 		exec($cmd);
+	}
+	}
+	if ($action == 'reindex'){
+	$check_ud = shell_exec('which updatedb');
+	if(!empty($check_ud)){
+		exec('updatedb --require-visibility 0',$ud,$r);
+			if ($r >0) {
+				echo 'setup appears wrong ?'.cr;
+			}
+		}
 	}
 }
 ?>

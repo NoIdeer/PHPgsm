@@ -1,9 +1,11 @@
 <?php
 //echo 'functions 1.04';
-define('fversion',1.04);
-$runfile = substr($argv[0], strrpos($argv[0], '/') + 1);
+	define('fversion',2.04);
+	$build = "36354-723805280";
+$runfile = basename($argv[0]);
 if (isset($argv[1])  and $runfile == 'functions.php') {
 	echo 'Functions v'.fversion.PHP_EOL;
+	echo 'Build '.$build.PHP_EOL;
 	exit;
 }
 function get_boot_time() {
@@ -205,90 +207,46 @@ function get_cpu_info() {
 		return $cpu_info;
 }
 function get_user_info ($Disk_info) {
-	error_reporting(E_ALL);
+	
 	if(!defined('cr') ){
 		define('cr',PHP_EOL);
 	}
-	// return user info as an array
-	//print_r($Disk_info);
 	$user['name'] = trim(shell_exec("whoami"));
 	$user['level'] =check_sudo($user['name']);
-	//$q = shell_exec("quota -s 2> /dev/null");
-	$q = shell_exec("quota  2> /dev/null");
-	$cmd = "du -hs /home/".trim($user['name'])." 2> /dev/null";
-	$du = trim(shell_exec($cmd)); //"du -hs /home/jim 2> /dev/null"
-	$du = explode("\t",$du);
-	//$du = filesize("/home/".trim($user['name']));
-	//echo "du raw = $du[0]".CR;
-	//echo 'user home collected'.cr;
-	// problem here
-	//print_r ($du).CR;
-	//echo '$q = '.$q.cr;
-	if(empty($q)) {
-		
-		//echo "Quota Not installed".CR;
-		if(isset($Disk_info['home_free'])){
-		$user['quota_used'] = format_num($du[0]); 
-		$user['quota'] = $Disk_info['home_size'];
-		$user['quota_free'] = $Disk_info['home_free'];
-	}
-	else {
-		// use boot
-		$user['quota_used'] = format_num($du[0]); 
-		$user['quota'] = $Disk_info['boot_size'];
-		$user['quota_free'] = $Disk_info['boot_free'];
-	}
-	}
-	else {
-		// run quota
-		if(is_cli()) {
-		$tmp = explode(cr,$q);
-		$tmp =trim($tmp[2]);
+	exec("quota 2> /dev/null",$quota,$ret);
+	if (isset($quota[1])){
+		// user has quota
+		$tmp =trim($quota[2]);
 		$tmp = explode(' ',$tmp);
-	}
-	else {
-		$tmp = explode(' ',$q);
-		for($i = 0; $i<=40; $i++) {
-			unset($tmp[$i]);
-			}
-			//echo 'in loop'.cr;
-			//echo print_r($tmp,true).cr;
-	}
-		
-		//print_r($tmp);
-		
 		foreach ($tmp as $k => $v) {
-			if (empty(trim($v))) {
-				unset($tmp[$k]);
-		}
-	}
-	$tmp = array_values($tmp);
-	// print_r($tmp); // now all renumbered
-	$used = dataSize($tmp[1]*1024);
-	$total = dataSize($tmp[2]*1024);
-	$free = dataSize(($tmp[2]*1024)-($tmp[1]*1024));
-				//if (intval($tmp[1]) === 0) {
-			// unlimited
-			//$user['quota'] = 'Unlimited';
-			
-		//}
-	    //else {
-			$user['quota'] = $total;
-			$user['quota_raw'] = $tmp[1] ;
-			//}
-	    $user['quota_used'] = $used;
-	    //echo intval($q[15]).CR;
-	    if ($tmp[1] === 0 ) {
-						
-			$user['quota_free'] = $Disk_info['boot_free'];
-		}
-	    else 
-	    {
-			$user['quota_free'] = $free;
+                if (empty(trim($v))) {
+                   unset($tmp[$k]);
+                }
+			}
+        $tmp = array_values($tmp);
+        // now all renumbered
+        $used = dataSize($tmp[1]*1024);
+        $total = dataSize($tmp[2]*1024);
+        $free = dataSize(($tmp[2]*1024)-($tmp[1]*1024));
+        $user['quota_used'] = $used;
+        $user['quota'] = $total; 
+        $user['quota_free'] = $free;
+       
+}
+	else {
+			if(isset($Disk_info['home_free'])){
+				$free =floatval( $Disk_info['home_free'])+floatval($Disk_info['boot_free']).' GB';
+				$user['quota'] = $Disk_info['home_size'];	
+				$user['quota_free'] = $free;
+				$user['disk_locations'] = 2;
+			}
+			else {
+				$user['quota'] = $Disk_info['boot_size'];
+				$user['quota_free'] = $Disk_info['boot_free'];
+				$user['disk_locations'] = 1;
 			}
 	}
-	//print_r($user);
-	//die();
+	
 	return $user;    
 	
 }
@@ -437,66 +395,62 @@ function get_software_info($database) {
 }
 function get_disk_info() {
 	// return disk info as array
-	$disks = shell_exec("lsblk -l");
-	$boot = shell_exec("df -h /boot");
-	$home = shell_exec("df -h /home");
-	$root = shell_exec("df -h /");
-	if ($root === $home) {
-		//echo 'one disk'.CR;
-		//$disk_info['disk'] = $root;
-				if(strstr($boot, PHP_EOL)) {
-		// test for line break
-		//echo "line break".CR;
-		$boot = explode(" ",trim(strstr($root, PHP_EOL)));
-		//print_r($boot).CR;
-		$boot=array_filter($boot);
-		$boot = array_slice($boot, 0);
-		//print_r($boot).CR;
-		$disk_info['boot_filesystem'] = trim($boot[0]);
-		$disk_info['boot_size'] = format_num(trim($boot[1]),2);
-		$disk_info['boot_used'] = format_num(trim($boot[2]),2);
-		$disk_info['boot_free'] = format_num(trim($boot[3]),2);
-		$disk_info['boot_pc'] = trim($boot[4]);
-		$disk_info['boot_mount'] = trim($boot[5]);
+	//echo 'root stuff ! or no quota !'.cr;
+exec('df -h /',$df,$ret); //need this for sdd or sep system partition
+unset ($df[0]);
+$df = array_values($df);
+exec('df -h |grep sd',$tmps,$ret);
+if (empty($tmps)) {
+	exec('df -h |grep vd',$tmps,$ret);
+}
+foreach ($tmps as $tmp) {
+	$df[]=$tmp;
+}
+foreach ($df as $disk) {
+	$tmp = explode('  ',trim($disk));
+	
+	foreach ($tmp as $k =>$v) {
+		//squash blanks
+		if (empty(trim($v))) {
+
+                        unset($tmp[$k]);
+                }
+              else {
+				  $x = strpos($v,"%");
+				  if ($x) {
+					  $tmp[$k] = substr($v,0,$x+1);
+					  $tmp[] = trim(substr($v,$x+1));
+				  }
+				  else {
+				  $tmp[$k] = trim($v);
+			  }
+			  }
+			  
+			}
+	$tmp = array_values($tmp);		
+	$r[]=$tmp;   
+	
+	//echo print_r($tmp,true).cr;
+}
+if ($r[0] == $r[1]) {unset($r[1]);}
+		$disk_info['boot_filesystem'] = $r[0][0];
+		$disk_info['boot_size'] = $r[0][1];
+		$disk_info['boot_used'] = $r[0][2];
+		$disk_info['boot_free'] = $r[0][3];
+		$disk_info['boot_pc'] = $r[0][4];
+		$disk_info['boot_mount'] = $r[0][5];
 		$disk_info['boot_hide'] = "ok";
 		
-	}
-}
-	else {
-		if(strstr($boot, PHP_EOL)) {
-		// test for line break
-		//echo "line break".CR;
-		$boot = explode(" ",trim(strstr($boot, PHP_EOL)));
-		$boot=array_filter($boot);
-		$boot = array_slice($boot, 0);
-		//echo 'new str '.$new_str.CR;
-		$disk_info['boot_filesystem'] = trim($boot[0]);
-		$disk_info['boot_size'] = format_num($boot[1]);
-		$disk_info['boot_used'] = format_num($boot[2]);
-		$disk_info['boot_free'] = format_num($boot[3]);
-		$disk_info['boot_pc'] = trim($boot[4]);
-		$disk_info['boot_mount'] = trim($boot[5]);
-	}	
-	if(strstr($home, PHP_EOL)) {
-		$home1 = explode(" ",trim(strstr($home, PHP_EOL)));
-		$home1 = array_filter($home1);
 		
-		$home1 = array_slice($home1,0);
-		//print_r($home1);
-		$disk_info['home_filesystem'] = $home1[0];
-		$disk_info['home_size'] = format_num($home1[1]);
-		$disk_info['home_used'] = format_num($home1[2]);
-		$disk_info['home_free'] = format_num($home1[3]);
-		$disk_info['home_pc'] = $home1[4];
-		$disk_info['home_mount'] = $home1[5];
+	if(isset($r[1])) {
+		$disk_info['home_filesystem'] = $r[1][0];
+		$disk_info['home_size'] = $r[1][1];
+		$disk_info['home_used'] = $r[1][2];
+		$disk_info['home_free'] = $r[1][3];
+		$disk_info['home_pc'] = $r[1][4];
+		$disk_info['home_mount'] = $r[1][5];
 	}
-		// test for line break
-		//$disk_info['boot'] = $boot;
-		//$disk_info['root'] = $root;
-		//$disk_info['home'] = $home;
-	}
-	//print_r($disk_info);
-	//unset ($disk_info['boot']);
+		
 	return $disk_info;
 }
 function format_num ($string) {
@@ -946,99 +900,6 @@ else {
  * @return
  * cure html div bug
  */
-function html_display($tm,$results) {
-	
-	// cure html div bug
-	$database = new db(); // connect to database
-	foreach( $tm as $key=>$value) {
-		// loop through servers
-			$players = 	$results[$key]['gq_numplayers'].'/'.$results[$key]['gq_maxplayers']; //players online
-			$online  = $results[$key]['gq_online']; //server responding
-			$logo ='img/'.strtolower($results[$key]['game_id']).'.ico';
-			    $update['running'] = 1;
-				$update['starttime'] = $value;
-			    $where['host_name'] = $key;
-			    //echo $key.'<br>'; 
-			    $database->update('servers',$update,$where);
-			if (!empty($online)) {
-				// the server is up display title
-				// add sub template ?
-				$link = $results[$key]['gq_address'].':'. $results[$key]['gq_port_client'];
-				$disp .= '<!-- start template--><div  class="col-lg-6"><div><img style="width:10%;padding:1%;" src="'.$logo.'"><i style="color:green;">'.$results[$key]["gq_hostname"]
-				.'</i> <br>Started at '.
-				 date('g:ia \o\n l jS F Y \(e\)', $value).'<br><span id="op1'.$key.'" style="cursor:pointer;">Players Online <span id="gol'.$key.'">'.$players.'</span> - Map - <span id="cmap'.$key.'">'.$results[$key]["gq_mapname"].
-				 '</span></span><br><i style="color:blue;"><a href="steam://connect/'.$link.'/"><span class="btn btn-primary btn-sm">Join</span></a></i></div>';
-				 $disp .= '<div id="ops'.$key.'" style="display:none;"><table><thead><tr><th style="width:60%;">Name</th><th style="width:20%;">Score</th><th>Time Online</th></tr></thead>'; // start table
-				 $disp .= '<tbody id ="pbody'.$key.'">'; // add body
-				if ($players >0) {
-					// we have players
-					// add sub template
-					
-					$player_list = $results[$key]['players']; // get the player array
-					orderBy($player_list,'gq_score','a'); // order by score
-					foreach ($player_list as $k=>$v) {
-						//loop through player array
-						$playerN = $player_list[$k]['gq_name']; // chop to 20 chrs
-						//$playerN = iconv("UTF-8", "ISO-8859-1//IGNORE", $playerN); //remove high asci
-						$playerN = str_pad($playerN,25); //pad to 25 chrs
-						switch (true) {
-							// format score
-							case  ($player_list[$k]['gq_score']<0) :
-								// minus
-								$pscore = '&nbsp;&nbsp;'.$player_list[$k]['gq_score']; //format score
-								break;
-							case  ($player_list[$k]['gq_score']<10) :
-								//
-								$pscore = '&nbsp;&nbsp;&nbsp;&nbsp;'.$player_list[$k]['gq_score']; //format score
-								break;
-								case  ($player_list[$k]['gq_score']<100) :
-								//
-								$pscore = '&nbsp;&nbsp;'.$player_list[$k]['gq_score']; //format score
-								break;
-							case  ($player_list[$k]['gq_score']<1000)	:
-								//
-								$pscore = $player_list[$k]['gq_score']; //format score
-								break;
-						}
-						// format display here
-						// add sub template
-						$disp .='<tr><td><i style="color:green;">'.$playerN.'</i></td align="center"><td><span>'.$pscore.'</span></td><td>&nbsp;'.gmdate("H:i:s", $player_list[$k]['gq_time']).'</td></tr>';
-						
-					}
-					// end of players for each
-					
-				}
-				//end of players
-				// close div
-				$disp .='</tbody></table></div><!--End template--><script>
-				$("#op1'.$key.'").click(function(){
-				$("#ops'.$key.'").slideToggle("fast");
-  });
- 	</script>';
-				$disp .= '<br></div>';
-				
-			}
-			else {
-				//server not responding
-				$logo ='img/warning.png';
-				$players = '<i style=color:red;>'.$key.'</i> is not responding, please recheck the server configuration or wait for the server to start';
-				$disp .= '<!-- start template--><div  class="col-lg-6"><div><img style="width:10%;padding:1%;" src="'.$logo.'"><i style="color:green;">'.$results[$key]["gq_hostname"]
-				.'</i> <i style="color:blue;">('.$results[$key]['gq_address'].':'. $results[$key]['gq_port_client']."</i>)<br>Started at ".
-				 date('g:ia \o\n l jS F Y \(e\)', $value).'<br><span id="op1'.$key.'" style="cursor:pointer;"><span id="gol'.$key.'">'.$players.'</span><span id="cmap'.$key.'"></span></span></div>';
-				 $disp .= '<div id="ops'.$key.'" style="display:none;"><table><thead><tr><th style="width:60%;">Name</th><th style="width:20%;">Score</th><th>Time Online</th></tr></thead>'; // start table
-				 $disp .= '<tbody id ="pbody'.$key.'">'; // add body
-				//$disp .= '<div  class="col-lg-6"><i style=color:red;>'.$key.'</i> is not responding, please recheck the server configuration or wait for the server to start
-				//<br> or perhaps there is something else wrong</div>';
-			}
-			//return $disp;
-		}
-			// no servers running
-			if (empty($disp)) {
-			$disp .= '<div  class="col-lg-6"><i style=color:red;>No Servers Running</i><div>';
-		}
-			return $disp;
-}
-
   
 
   function get_sessions() {
@@ -1089,33 +950,6 @@ function html_display($tm,$results) {
 	 return $xy;
 	
    }
-   function html_display_version() {
-	   echo 'started version'.CR;
-	   /*	$version ='<br style="clear:both;">'. CR."Software Version 1.0.34.0β".CR.
-	 CR.'Copyright (c) '.date("Y").', NoIdeer Software
-All rights reserved.
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that
-the following conditions are met:
-Redistributions of source code must retain the above copyright notice, this list of conditions and the
-following disclaimer.
-Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the
-following disclaimer in the documentation and/or other materials provided with the distribution.
-Neither the name of the NoIdeer Software nor the names of its contributors may be used to endorse or
-promote products derived from this software without specific prior written permission.
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
-ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
-LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
-CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
-SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
-INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
-CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
-ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-POSSIBILITY OF SUCH DAMAGE.'.CR.CR; */
-echo 'ready to return version'.CR;
-//return $version;
-}
 
 function local_build($ldata) {
 	

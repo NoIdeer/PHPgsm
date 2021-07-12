@@ -46,7 +46,8 @@
  * @license  http://www.opensource.org/licenses/mit-license.php MIT License
  * @link     http://pear.php.net/package/Console_Color
  */
-class Console_Color2
+	$build = "10492-690475681";
+class Color
 {
 
     protected $color_codes;

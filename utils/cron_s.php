@@ -1,7 +1,7 @@
 #!/usr/bin/php -d memory_limit=2048M
 <?php
 /*
- * cron_r.php
+ * cron_s.php
  * 
  * Copyright 2021 Jim Richardson <jim@noideersoftware.co.uk>
  * 
@@ -32,7 +32,7 @@ if (!defined('DOC_ROOT')) {
  define('space','%20');  
  define('VERSION',2.03);
  if (!defined('BUILD')) {
-	$build = "6114-1160633963";
+	$build = "6114-647428891";
 }
 else {
 	//
@@ -41,7 +41,7 @@ else {
 }
 require_once DOC_ROOT.'/includes/master.inc.php';
  if ($argv[1] =='v' || $argv[1] == '-v' ) {
-	 echo 'Cron_R v'.VERSION.' - '.BUILD.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+	 echo 'Cron_S v'.VERSION.' - '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
 	 exit; 
  }
  include  DOC_ROOT.'/functions.php';

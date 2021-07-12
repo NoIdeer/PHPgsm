@@ -39,7 +39,7 @@ function updateClock ()
      }
 
 function online(url,timeout,hide){
-        //console.log('Welcome to online using '+url);
+        console.log('Welcome to online using '+url);
 	 $.ajax({
      url: url,
    type: 'post',
@@ -63,7 +63,7 @@ for (var i in data1) {
 	}	
    for (var j in data1[i]) {
 	// we have the individal server
-	//console.log('Processing '+j);
+	console.log('Processing '+j);
 	 if (typeof serverlength === 0) {
 						   console.log('server not set');
 						   			return;
@@ -80,15 +80,16 @@ for (var i in data1) {
 	 //console.log(playern);
 	  $('#pl'+server_id).html(playern); 
 	 //alert(server_id);
-     	//console.log(server.server_name);
+     	console.log(server.server_name);
 	                  $("#"+server_id).show();
 	                   var start_date = timeConverter(parseFloat(server.starttime));
+					//console.log(start_date);
 					   var logo  =server.url+':'+server.bport+'/'+server.logo;
 					  //console.log('server.Players = '+server.Players );
 					   if (typeof server.Players === "undefined") {
-						   //console.log('Players not set '+server.server_name);
-						   			return true;
-						   			//server.Players = 0;
+						   console.log('Players not set '+server.server_name);
+						   			//return true;
+						   			server.Players = 0;
 								}   
 					    $("#img"+server_id).attr("src",logo);
 						$('#cmap'+server_id).html(server.Map);
@@ -309,6 +310,24 @@ for (var i in data1) {
   //}
    });
  }
+ function server_info(url) {
+	 //get player functions
+	 console.log(url);
+	  $.ajax({ 
+        type: 'GET', 
+        url: url, 
+        dataType: "json", 
+        success: function (data) {
+			console.log('got data');
+             
+           
+        },
+        complete:function(data){
+			 console.log('jog done'); 
+		}
+    });
+ }
+ 
  function base_servers(url) {
 	 // bring back base_server detail
 	  $.ajax({ 
@@ -422,19 +441,30 @@ function timeConverter(UNIX_timestamp){
   var weekday = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
   var year = a.getFullYear();
   var month = months[a.getMonth()];
-  var day =weekday[a.getDay()];
+  var day = weekday[a.getDay()];
   var date = a.getDate();
   var hour = a.getHours();
   var timeOfDay = ( hour < 12 ) ? "am" : "pm"; 
   currentHours = ( hour > 12 ) ? hour - 12 : hour;
      // Convert an hours component of "0" to "12"
     
-  hour = ( currentHours == 0 ) ? 12 : currentHours;
+  //hour = ( currentHours == 0 ) ? 12 : currentHours;
  
-  var date =dateOrdinal(date);
-  var min = a.getMinutes();
+  //var date = dateOrdinal(date);
+  var d = a.getDate();
+	var d1 =a.getHours();
+console.log(currentHours);
+var d = ('0'+d).slice(-2);
+	var m = a.getMonth()+1;
+var m = ('0'+m).slice(-2);
+
+var hour =('0'+hour).slice(-2);
+        //m += 1;  // JavaScript months are 0-11
+	var y = a.getFullYear();
+  var min = ('0'+a.getMinutes()).slice(-2);
   var sec = a.getSeconds();
-  var time = day+', '+date+ ' ' + month + ' ' + year + ' ' + hour + ':' + min+timeOfDay ;
+
+  var time = d+ '-' + m + '-' + y + ' ' + hour + ':' + min ;
   return time;
 }
 
