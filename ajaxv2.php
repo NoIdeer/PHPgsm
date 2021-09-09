@@ -31,7 +31,7 @@ require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	define( 'LOG',	'logs/ajax.log');
 	define ('cr',PHP_EOL);
 	define ('CR',PHP_EOL);
-	$build = "44658-2257669275";
+	$build = "45678-1917043501";
 	$version = 2.07;
 error_reporting (0);
 $update_done= array();
@@ -107,7 +107,9 @@ if(!$valid) {
 					$console_data = array_merge($console_data,viewserver($cmds));
 					if ($cmds['debug'] == true){
 						print_r($console_data);
+						//exit;
 					}
+					
 					else {
 						echo json_encode($console_data);
 					}
@@ -163,6 +165,7 @@ if(!$valid) {
 		case "top" :
 				if (isset($cmds['filter'])) {
 					//do stuff
+					print_r($cmds);
 					echo shell_exec('top -b -n 1 -p '.$cmds['filter'].' | sed 1,7d');
 				}
 			 	exit;
@@ -172,12 +175,20 @@ if(!$valid) {
 					exit;
 					
 			case "game_detail" :
-					
+					$data = game_detail();
 					if($cmds['debug'] =='true' ) {
-						echo print_r(game_detail(),true).cr;
+						echo print_r($data,true).cr;
+						exit;
 						}
+						//print_r($cmds);
+					if (isset($cmds['output']) and $cmds['output'] == 'xml') {
+						$xml = array2xml($data, false);
+						//echo '<pre>';
+						//print_r($xml);
+						print($xml->asXML());
+					}	
 					else {
-							echo json_encode(utf8ize(game_detail()));
+							echo json_encode(utf8ize($data));
 						}
 					exit;	
 			
@@ -290,9 +301,10 @@ function game_detail() {
                
                 $tmp = explode(' ',$new);
 				if (!empty($tmp[0])) {
+					//print_r($tmp);
 					$pid = $tmp[0];
 					$count = count($tmp);
-					$temp =  trim(file_get_contents($server_data['url'].':'.$server_data['bport'].'/ajax.php?action=top&filter='.$pid.'&key='.md5( ip2long($ip)))); // works on remote ?
+					$temp =  trim(file_get_contents($server_data['url'].':'.$server_data['bport'].'/ajaxv2.php?action=top&filter='.$pid)); // works on remote ?
 					$temp = array_values(array_filter(explode(' ',$temp)));
 					$du = shell_exec('du -s '.$server_data['location']); // get size of game
 					$x = strpos(trim($du),'/');
@@ -346,7 +358,8 @@ function game_detail() {
 					$ip = file_get_contents('https://api.ipify.org');
 					if (empty($ip)) { $ip = file_get_contents('http://ipecho.net/plain');}
 				}
-				$checkip = substr($ip,0,strlen($ip)-1); 
+				//$checkip = substr($ip,0,strlen($ip)-1);
+				$checkip = $ip; 
 				// alter this bit	
 				// use screen to test 	
 				exec('ps -C screen -o pid,cmd |sed 1,1d',$tmp,$val); // this gets running only needs rework may 2021
@@ -356,8 +369,8 @@ function game_detail() {
 				if(empty($tmp)) {
 						// nothing running
 						
-						$sql =  'SET sql_mode = \'\'';
-						$a= $db->query( 'SET sql_mode = \'\''); 
+						//$sql =  'SET sql_mode = \'\'';
+						//$a= $db->query( 'SET sql_mode = \'\''); 
 						$sql ='select  servers.location,count(*) as total from servers where servers.host like "'.$checkip.'%"';
 						//echo $sql;
 						$server_count = $db->get_row($sql);
@@ -372,6 +385,7 @@ function game_detail() {
 			else{
 						// here we have the runners in $tmp array
 						$sql = 'select * from server1 where host like "'.$checkip.'%" and enabled=1 order by server_name ASC';
+						//$sql = "SELECT DISTINCT `host_name`,`server_name`,`url`,`bport`,`location`,`host`,`port`,`running` FROM server1 where `running` = 1 order by `host_name`";
 						$servers = $db->get_results($sql);
 						$server_count = $db->num_rows($sql);
 						
@@ -468,7 +482,10 @@ function all($cmds) {
 			$return = array_merge($return,get_user_info($return));
 			//if(isset($cmds['servers'])) {
 				$tmp = game_detail();
+				//print_r($tmp);
 				$add = $tmp['general'];
+				//print_r($add);
+				//print_r($return);
 				$x = floatval($add['total_size'])/1000; // get size
 				$return['quota_pc'] =  number_format( $x* (100/floatval($return['quota'])) ,2);
 				$return = array_merge($return,$add);
@@ -874,7 +891,8 @@ function scanlog($cmds) {
 	$display='';
 	if ($cmds['server'] == 'all') {
 	
-		$allsql = 'SELECT servers.* , base_servers.url, base_servers.port as bport, base_servers.fname,base_servers.ip as ipaddr FROM `servers` left join `base_servers` on servers.host = base_servers.ip where servers.id <>"" and servers.running="1" order by servers.host_name';
+		//$allsql = 'SELECT servers.* , base_servers.url, base_servers.port as bport, base_servers.fname,base_servers.ip as ipaddr FROM `servers` left join `base_servers` on servers.host = base_servers.ip where servers.id <>"" and servers.running="1" order by servers.host_name';
+		$allsql = "SELECT * FROM `server1`where running=1";
 		$game_results = $database->get_results($allsql);
 		$display='';
 	
@@ -883,14 +901,20 @@ function scanlog($cmds) {
 		$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=get_file&file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log'; //used for screen log
 		//$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=lsof&filter='.$run['host_name'].'&loc='.$run['location'].'/'.$run['game'].'&return=content'; //used for steam log
 		$tmp = file_get_contents($path);
-		//echo $run['host_name'].' '.$path.cr; // debug code
+		if (isset($cmds['debug'])) {
+			echo $run['host_name'].' '.$path.cr; // debug code
+		}
 				
 		if (!empty($tmp)) {
 			$tmp = array_reverse(explode(cr,trim($tmp)));
 			$current_records = count($tmp) ;
-			
-				if (file_exists($run['host_name'].'-md5.log')) {
-					$logold = explode(cr,trim(file_get_contents($run['host_name'].'-md5.log')));
+			//print_r($_SERVER);
+				$tmp_path = $_SERVER['PHP_SELF'];
+				//echo $tmp_path.cr;
+				$tmp_path= dirname($tmp_path);
+				//echo $tmp_path.cr;
+				if (file_exists($tmp_path.'/tmp/'.$run['host_name'].'-md5.log')) {
+					$logold = explode(cr,trim(file_get_contents($tmp_path.'/tmp/'.$run['host_name'].'-md5.log')));
 					$lastrecord = intval(trim($logold[1]));
 				
 				if ($current_records == $lastrecord) {
@@ -906,14 +930,14 @@ function scanlog($cmds) {
 			
 			if (isset($cmds['debug']) && $cmds['debug'] == 'true') {
 				echo print_r($logold,true).cr;
-				//echo ' Maths = '.intval($current_records)-intval($lastrecord).cr;
-				//echo 'file changed records => '.intval($current_records)-$lastrecord.'/'.$current_records.cr;
+				echo ' Maths = '.intval($current_records)-intval($lastrecord).cr;
+				echo 'file changed records => '.intval($current_records)-$lastrecord.'/'.$current_records.cr;
 			}
 			
 		unset($return);
 		$logpos = md5($tmp[0]); // got log pos
-		file_put_contents($run['host_name'].'-md5.log',$logpos.cr.count($tmp));
-		file_put_contents('/tmp/'.$run['host_name'].'-md5.log',$logpos.cr.count($tmp));
+		//file_put_contents($run['host_name'].'-md5.log',$logpos.cr.count($tmp));
+		file_put_contents($tmp_path.'/tmp/'.$run['host_name'].'-md5.log',$logpos.cr.count($tmp));
 		foreach ($tmp as $logline){
 			if(isset($logold[0])){
 				if (md5(trim($logline)) == $logold[0] && !isset($cmds['fullscan'])) {
@@ -934,11 +958,11 @@ function scanlog($cmds) {
 		}
 			
 	}
-	if (!file_exists($run['host_name'].'-md5.log')) {
+	if (!file_exists($tmp_path.'/tmp/'.$run['host_name'].'-md5.log')) {
 		//create files
 		$logpos = md5($tmp[0]); // got log pos
 		//file_put_contents($run['host_name'].'-md5.log',$logpos.cr.count($tmp));
-		file_put_contents('/tmp/'.$run['host_name'].'-md5.log',$logpos.cr.count($tmp));
+		file_put_contents($tmp_path.'/tmp/'.$run['host_name'].'-md5.log',$logpos.cr.count($tmp));
 	}
 	}
 	else {
@@ -948,7 +972,7 @@ function scanlog($cmds) {
 }
 else {
 	// do default or supplied file
-
+//$sql = "SELECT * FROM `server1`where running=1";
 	$allsql = 'SELECT servers.* , base_servers.url, base_servers.port as bport, base_servers.fname,base_servers.ip as ipaddr FROM `servers` left join `base_servers` on servers.host = base_servers.ip where servers.host_name="'.$cmds['server'].'"';
 		//echo $allsql.cr;
 	$run = $database->get_row($allsql);
@@ -1161,7 +1185,7 @@ foreach ($la as $user_data) {
 		if ($last_logon >  $result['last_log_on']) {
 			$result['last_log_on'] = $last_logon;
 			$result['log_ons'] ++;
-			$ut.= ' new logon at '.$user_data['time'].' (total '.$result['log_ons'].')';
+			$ut.= ' new logon at '.date("d-m-y H:i:s",$last_logon).' (total '.$result['log_ons'].')';
 			$modify=true;
 			$logon = true;
 		}
@@ -1267,7 +1291,7 @@ foreach ($la as $user_data) {
 	    $user_stub ="\t".$username.' ('.$result['country'].') ';
 	    if ($in === true ){
 			 	 $done++;
-			 	 $ut .=' Record added at '.$user_data['time'].cr;
+			 	 $ut .=' Record added at '.date("d-m-y H:i:s",$last_logon).cr;
 			 	 $sql = 'call update_logins ('.$result['steam_id64'].',"'.$server.'",'.$result['last_log_on'].')';
 			 	 //$ut .= $sql.cr;
 			 	 $database->query($sql);
@@ -1331,7 +1355,7 @@ function update_server($server){
 	$exe = urlencode($steamcmd.' +login anonymous +force_install_dir '.$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
 	$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 	$s .=file_get_contents($cmd);
-	echo 'updated server using '.$cmd.cr;
+	//echo 'updated server using '.$cmd.cr;
 	//$cmd = $stub.'s';
 	//$s .= file_get_contents($cmd).cr;
 	//need to restart all that stem from this install dir if running
@@ -1354,6 +1378,7 @@ function get_pid($task) {
 		echo "task = $task".cr;
 	}
 	exec ('ss -plt |grep '.$task,$detail,$ret);
+	//print_r($detail);
 	$a = explode('  ',$detail[0]);
 	$b = explode(',',trim(end($a)));
 	preg_match('!\d+!', $b[1], $matches);
@@ -1363,5 +1388,22 @@ function get_pid($task) {
 		echo $matches[0].cr;
 	}
 	return $matches[0];
+}
+
+function array2xml($array, $xml = false){
+
+    if($xml === false){
+        $xml = new SimpleXMLElement('<result/>');
+    }
+
+    foreach($array as $key => $value){
+        if(is_array($value)){
+            array2xml($value, $xml->addChild($key));
+        } else {
+            $xml->addChild($key, $value);
+        }
+    }
+
+    return $xml->asXML();
 }
 ?>
