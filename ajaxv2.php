@@ -19,7 +19,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
  * MA 02110-1301, USA.
  * 
- * ajax v2 to go with xml v2 & mybb.js
+ * ajax v2 to go with xml v2 & mybb.js perhaps
  *  requires PHP  >= 7.4
  */
 require_once 'includes/master.inc.php';
@@ -31,7 +31,7 @@ require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	define( 'LOG',	'logs/ajax.log');
 	define ('cr',PHP_EOL);
 	define ('CR',PHP_EOL);
-	$build = "45678-1917043501";
+	$build = "46611-3909981191";
 	$version = 2.07;
 error_reporting (0);
 $update_done= array();
@@ -39,7 +39,7 @@ $ip = $_SERVER['SERVER_ADDR']; // get calling IP
 $sql = 'select * from base_servers where base_servers.ip ="'.$_SERVER['REMOTE_ADDR'].'"'; // do we know this ip ? mybb sets this at login
 //echo $sql.'<br>';
 $valid = $database->num_rows($sql); // get result if the ip can use the data the return value >0
-//echo $ip." Valid = $valid <br>".cr;
+
 if(is_cli()) {
 	$valid = 1; // we trust the console
 	$sec = true;
@@ -62,13 +62,16 @@ else {
 	error_reporting( 0 );
 	if (!empty($_POST)) {
 		$cmds = convert_to_argv($_POST,"",true);
+		$method = 'POST';
 	}
 	else {
 		if (isset($cmds)) {
 			$cmds = array_merge($cmds,convert_to_argv($_GET,"",true));
+			$method .='/GET';
 		}
 		else {
 			$cmds = convert_to_argv($_GET,"",true);
+			$method = 'GET';
 		}
 	}
 }
@@ -76,7 +79,14 @@ else {
 if(!$valid) { 
 	die( 'invalid request '.$ip.cr );
 }
-
+$entry ='';
+foreach ($cmds as $k=>$v) {
+	//
+	$entry .="$k=>$v ";
+}
+$rip = $_SERVER['REMOTE_ADDR'];
+$logline = date("d-m-Y H:i:s")." $rip Valid = $valid method = $method cmds = $entry".cr;
+file_put_contents(LOG,$logline,FILE_APPEND);
 // do what's needed
 	switch (strtolower($cmds['action'])) {
 		case "all" :
@@ -231,7 +241,13 @@ function lsof($cmds) {
 						$filename = $x[10]; //got file name
 						if (!empty($cmds['return'])) {
 							//echo 'get contents of '.$filename.'    '.filesize($filename).cr;
-							echo file_get_contents($filename);
+							$return = file_get_contents($filename);
+							if (strlen($return) >0) {
+								echo $return;
+							}
+							else {
+								echo 'no data';
+							}
 						}
 						else {
 							echo $filename;
@@ -355,8 +371,8 @@ function game_detail() {
 			else {
 					$host= gethostname();
 					$ip = gethostbyname($host);
-					$ip = file_get_contents('https://api.ipify.org');
-					if (empty($ip)) { $ip = file_get_contents('http://ipecho.net/plain');}
+					$ip = geturl('https://api.ipify.org');
+					if (empty($ip)) { $ip = geturl('http://ipecho.net/plain');}
 				}
 				//$checkip = substr($ip,0,strlen($ip)-1);
 				$checkip = $ip; 
@@ -550,15 +566,21 @@ function exescreen ($cmds) {
 			}
 			switch ($server['binary_file']) {
 		case 'srcds_run':
-			$cmd = 'screen -X -S '.$server['host_name'] .' quit';
+			//$cmd = 'screen -X -S '.$server['host_name'] .' quit';
+			$cmd = 'screen -S '.$exe.' -p 0 -X stuff "'.'quit'.'^M"';
 			break;
 		default:
 				$cmd = 'screen -XS '.$server['host_name'] .' quit';
 			break;
 		}
 			
-			exec($cmd);
+			exec($cmd,$content,$ret_val);
 			$return = 'Stopping Server '.$server['host_name'];
+			if ($ret_val == 0) {
+				// tidy up screen 
+				$cmd = 'screen -X -S '.$server['host_name'] .' quit';
+				exec($cmd);
+			}
 			$update['running'] = 0;
 			$update['starttime'] = '';
 			$where['host_name'] = $exe; 
@@ -661,7 +683,7 @@ function exe($cmds) {
 	
 			if (isset($cmds['debug'])) {
 				//echo ' ready to do command '.$cmds['cmd'].cr;
-	
+				//print_r($output);
 				foreach ($output as $line) {
 					$return .= $line.cr;
 				}
@@ -672,9 +694,9 @@ function exe($cmds) {
 		// test if no debug needs to return somthing on success
 			foreach ($output as $line) {
 				//$return .= $line.cr;
-				if(strpos($line,'! App ')) {
+				//if(strpos($line,'! App ')) {
 					$return = $line.cr;
-				}
+				//}
 				//$return ; //.= $retval.cr;
 				}
 	
@@ -872,8 +894,8 @@ function scanlog($cmds) {
 	// scanlog as a function
 	error_reporting(E_ALL); // set errors on for dev
 	global $settings,$database,$update_done;
-	$ip = file_get_contents('https://api.ipify.org');// get ip
-	if (empty($ip)) { $ip = file_get_contents('http://ipecho.net/plain');}
+	$ip = geturl('https://api.ipify.org');// get ip
+	if (empty($ip)) { $ip = geturl('http://ipecho.net/plain');}
 	$localip = "ip = $ip";
 	 
 	if (empty( $settings['ip_key'] )) {
@@ -892,7 +914,7 @@ function scanlog($cmds) {
 	if ($cmds['server'] == 'all') {
 	
 		//$allsql = 'SELECT servers.* , base_servers.url, base_servers.port as bport, base_servers.fname,base_servers.ip as ipaddr FROM `servers` left join `base_servers` on servers.host = base_servers.ip where servers.id <>"" and servers.running="1" order by servers.host_name';
-		$allsql = "SELECT * FROM `server1`where running=1";
+		$allsql = "SELECT * FROM `server1`where running=1 order by host_name ASC";
 		$game_results = $database->get_results($allsql);
 		$display='';
 	
@@ -900,7 +922,7 @@ function scanlog($cmds) {
 		//bulid path done this way so we can get the file back from a remote server
 		$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=get_file&file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log'; //used for screen log
 		//$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=lsof&filter='.$run['host_name'].'&loc='.$run['location'].'/'.$run['game'].'&return=content'; //used for steam log
-		$tmp = file_get_contents($path);
+		$tmp = geturl($path);
 		if (isset($cmds['debug'])) {
 			echo $run['host_name'].' '.$path.cr; // debug code
 		}
@@ -1026,7 +1048,7 @@ else {
 	}
 		
 		
-		$tmp = file_get_contents($path);
+		$tmp = getul($path);
 		$tmp = array_reverse(explode(cr,trim($tmp)));
 		$current_records = count($tmp) ;
 				
@@ -1048,7 +1070,7 @@ function get_ip_detail($ip) {
 	global $settings; // get settings
 	$key = $settings['ip_key'];  // this has been checked via the calling function and should not be empty
 	$cmd =  'https://api.ipdata.co/'.$ip.'?api-key='.$key;
-	 $ip_data = json_decode(file_get_contents($cmd), true); //get the result
+	 $ip_data = json_decode(geturl($cmd), true); //get the result
 	 if (empty($ip_data['threat']['is_threat'])) {$ip_data['threat']['is_threat']=0;}
 	 return $ip_data;
 }
@@ -1134,6 +1156,11 @@ preg_match('/..\/..\/.... - ..:..:../', $value, $t); // get time
         $timestring = $t[0];
 		$timestring = str_replace('-','',$timestring);
 		preg_match('/(?<=")[^\<]+/', $value, $t); // get user
+		/* preg_split('/<\d>/', $t);
+		 * process $t[0]
+		 * $x = strpos('"',$t[0];
+		 * $username = substr($t[0],$x);
+		 */   
 		$username = $t[0];
 		//echo 'processing '.$username.' '.$ip.' '.$id2.cr; //debug code
 		$la[$username]['ip']=$ip;

@@ -1,6 +1,6 @@
 <?PHP
 global $database;
-	$build = "47904-935645429";
+	$build = "48487-3753288666";
     function set_option($key, $val)
     {
         $db = Database::getDatabase();
@@ -520,13 +520,37 @@ global $database;
     }
 
     // Grabs the contents of a remote URL. Can perform basic authentication if un/pw are provided.
-    function geturl($url, $username = null, $password = null)
+    function geturl($url, $username = null, $password = null,$options= null,$query=null)
     {
         if(function_exists('curl_init'))
         {
             $ch = curl_init();
-            if(!is_null($username) && !is_null($password))
-                curl_setopt($ch, CURLOPT_HTTPHEADER, array('Authorization: Basic ' .  base64_encode("$username:$password")));
+            if(!is_null($username) && !is_null($password)){
+				$headr[] = 'Authorization: Basic '. base64_encode("$username:$password");
+               
+                }
+              if(!is_null($options)) {
+				  foreach($options as $k=>$v){
+					   $headr[] = "$k: $v";
+				  }
+                   //print_r($headr);
+                   //die();
+			  }
+			  else {
+				  //echo 'no options<br>';
+			  }  
+			  
+             if(isset($headr)) {
+				 curl_setopt($ch, CURLOPT_HTTPHEADER, $headr);
+			 }   
+			 if(!is_null($query)) {
+				 echo 'in geturl<br>';
+				 print_r($query);
+				 echo '<br>';
+				 // add post fields
+				 curl_setopt( $ch, CURLOPT_CUSTOMREQUEST, "POST" );
+				 curl_setopt( $ch, CURLOPT_POSTFIELDS, $query );
+			 }
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
