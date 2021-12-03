@@ -1,7 +1,7 @@
 #!/usr/bin/php -d memory_limit=2048M
 <?php
 /*
- * cron_s.php
+ * cron_r.php
  * 
  * Copyright 2021 Jim Richardson <jim@noideersoftware.co.uk>
  * 
@@ -32,7 +32,7 @@ if (!defined('DOC_ROOT')) {
  define('space','%20');  
  define('VERSION',2.03);
  if (!defined('BUILD')) {
-	$build = "6089-4153356399";
+	$build = "6260-3808767217";
 }
 else {
 	//
@@ -40,10 +40,7 @@ else {
 	//use const NEW_ALLEGRO_ID as BUILD;
 }
 require_once DOC_ROOT.'/includes/master.inc.php';
- if ($argv[1] =='v' || $argv[1] == '-v' ) {
-	 echo 'Cron_S v'.VERSION.' - '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
-	 exit; 
- }
+ 
  include  DOC_ROOT.'/functions.php';
 require  DOC_ROOT.'/xpaw/SourceQuery/bootstrap.php';
 use xPaw\SourceQuery\SourceQuery;
@@ -52,6 +49,12 @@ define( 'SQ_ENGINE',      SourceQuery::SOURCE );
 define( 'LOG',DOC_ROOT.'/logs/cron.log'); 
 $done = array();
 $Query = new SourceQuery( ); 
+if(isset($argv[1])) {
+	if ($argv[1] =='v' || $argv[1] == '-v' ) {
+		echo 'Cron_R v'.VERSION.' - '.BUILD.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+		exit; 
+	}
+}
 $sql = 'select * from servers where running=1';
 //$sql = 'SELECT servers.* , base_servers.url, base_servers.port as bport, base_servers.fname,base_servers.ip as ipaddr, base_servers.base_ip,base_servers.password FROM `servers` left join `base_servers` on servers.host = base_servers.ip where servers.id <>"" and servers.running="1" order by servers.host_name';
 $sql = "SELECT * FROM `server1` WHERE running=1 ORDER BY`host_name` ASC";
@@ -78,7 +81,7 @@ foreach ($games as $game) {
 														file_put_contents(LOG,$error.cr,FILE_APPEND);
 														}
 		$Query->Disconnect( );
-		if ($info['Players'] == 0 ) {
+		if (isset($info['Players'])) {
 			$game['restart'] = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exescreen&server='.$game['host_name'].'&key='.md5($game['host']).'&cmd=';
 			$restart[] = $game;
 		}
@@ -97,13 +100,17 @@ foreach ($games as $game) {
 
 	echo 'Restarting '.count($restart).'/'.count($games).' server(s)'.cr;
 	foreach ($restart as $game) {
-			echo file_get_contents($game['restart'].'q').cr; // stop server
+			echo geturl($game['restart'].'q').cr; // stop server
 			//print_r($game);
-			$exe = urlencode ('./scanlog.php '.$game['host_name'].' '.$game['location'].'/log/console/'.$game['host_name'].'-console.log');
-			$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
-			$result =file_get_contents($cmd);
-			if (!$result == 0) {
+			$exe = './scanlog.php --silent -s'.$game['host_name'];
+			$cmd =  $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.urlencode ($exe); // run scanlog
+			$result = geturl($cmd);
+			if (!empty($result) ) {
+				file_put_contents(LOG,'Got some data back from '.$game['host_name'].cr,FILE_APPEND);
 				echo $result.cr;
+			}
+			else {
+				file_put_contents(LOG,'Scanlog failed for '.$game['host_name'].cr,FILE_APPEND);
 			}
 					 
 			// check updates
@@ -122,19 +129,19 @@ foreach ($games as $game) {
 				$exe = urlencode($steamcmd.' +login anonymous +force_install_dir '.$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
 				$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe;
 				//echo 'will execute '.$cmd.cr; // update full url
-				echo file_get_contents($cmd);
+				echo geturl($cmd);
 				$done[]=$game['install_dir']; // use this to test if update on core files has been done
 			}
 			// log prune
 			$exe = urlencode('tmpreaper  --mtime 1d '.$game['location'].'/log/console/');
-			$log_line = 'Prune command  '.$exe;
+			$log_line = 'Prune console logs for  '.$exe;
 			file_put_contents(LOG,$log_line.cr,FILE_APPEND);
 			$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 			echo file_get_contents($cmd);
 			$exe = urlencode('tmpreaper  --mtime 1d '.$game['location'].'/'.$game['game'].'/logs/');
 			$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 			echo file_get_contents($cmd);
-			$log_line = 'Prune here also '.$exe;
+			$log_line = 'Prune steam log files for '.$exe;
 			file_put_contents(LOG,$log_line.cr,FILE_APPEND);
 			sleep(1);
 			echo file_get_contents($game['restart'].'s').cr; // start server

@@ -81,7 +81,8 @@ require ('includes/master.inc.php');
 require 'includes/class.emoji.php';
 require 'includes/class.steamid.php';
     $version = 2.41;
-	$build = "15928-664940181";
+    define("VERSION",$version);
+	$build = "16086-1972239820";
 if(isset(options['v'])){
 			echo "Scanlog v$version - $build © NoIdeer Software ".date('Y').cr;
 		exit;
@@ -130,7 +131,7 @@ if ($file == 'all') {
 		}
 		else {
 			$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=get_file&file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log&key='.$server_key; //used for screen log
-		}
+					}
 		$tmp = geturl($path);
 		if(debug) {
 			echo $run['host_name'].' '.$path.cr; // debug code
@@ -231,7 +232,7 @@ if (debug) {
 		echo 'Found the following:-'.cr. print_r($la,true).cr;
 	} //debug code
 	else {
-		echo "No Logons in selected log for $server".cr;
+		echo "No Logons in selected log for $server since last server start".cr;
 	}
 }
 if (!isset($la)) { 
@@ -241,10 +242,10 @@ if (!isset($la)) {
 	if ( $pc == 0 ) {
 		if(!silent) {
 			//echo "No Logons in selected log for $server".cr;
-			$rt = "\t No Logons in selected log for $server".cr;
+			$rt = "\t No Logons in selected log for $server since last server start".cr;
 		}
 		else {
-			$rt ='';
+			//$rt ='';
 		}	
 	if ($uds == true) {
 		$s = update_server($server);
@@ -292,6 +293,7 @@ foreach ($la as $user_data) {
 		}
 		
 		if ($user_data['ip'] <> $result['ip']  or modify) {
+			if(!is_null($user_data)) {
 			$ut.= ' IP Changed from '.long2ip($result['ip']).' to '.long2ip($user_data['ip']);
 			//check ip on change
 			$ip_data = get_ip_detail($ip);
@@ -312,7 +314,7 @@ foreach ($la as $user_data) {
 			$result['ip'] = $user_data['ip'];
 			$modify=true;
 		}
-		
+	}
 		if (trim($username) <> $result['name']) {
 			$ut.= ' User name change from '.$result['name'].' to '.$username;
 			$result['name'] = trim($username);
@@ -355,7 +357,7 @@ foreach ($la as $user_data) {
 	}
 	else {
 		if (debug) {
-			echo 'adding '.$username.cr;
+			echo "adding $username".cr;
 		}
 		$added = true;
 		$ut .= $ut.' New user';
@@ -408,13 +410,13 @@ foreach ($la as $user_data) {
 		echo "$username record".cr.print_r($result,true).cr; 
 	}
 
-	if (isset($ut)) {
+	//if (isset($ut)) {
 		
 		if ($modify || $added) {
 			$rt = 'Processing server '.$server.cr.cr;		
 			$rt .= $user_stub.' '.$ut;
 		}
-	}
+	//}
 }
 
 
@@ -428,11 +430,10 @@ if ($uds == true) {
 	$rt .= update_server($server);
 }
 $rt .= cr.'Processed '.$server.cr;
-
 return $rt;
 }
 if (!silent) {
-$rt = "\t No new logons on $server since last run".cr;
+$rt = "\t No new logons on $server since last scan".cr;
 }
 if (debug ) {
 	echo strlen($rt).cr;
@@ -449,6 +450,10 @@ function get_ip_detail($ip) {
 		echo "getting ip data with $cmd".cr; 
 	}
 	$ip_data = json_decode(geturl($cmd), true); //get the result
+	if (empty($ip_data)) {
+		echo "Couldn't get data for $ip".cr;
+		return null;
+	}
 	 if (empty($ip_data['threat']['is_threat'])) {$ip_data['threat']['is_threat']=0;}
 	 //print_r($ip_data); //debug code
 	 return $ip_data;
@@ -471,8 +476,8 @@ function update_server($server){
 			}
 	$cmd = $stub.'q';
 	$s .= geturl($cmd).cr; // stopped server
-	// need to check if this is a root install, if so use the 'c' module to elevate the privs  
-	$exe = urlencode($steamcmd.' +login anonymous +force_install_dir '.$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
+	// need to check if this is a root install, if so elevate the privs  
+	$exe = urlencode('sudo '.$steamcmd.' +login anonymous +force_install_dir '.$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
 	$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 	$s .=geturl($cmd);
 	//echo 'updated server using '.$cmd.cr;

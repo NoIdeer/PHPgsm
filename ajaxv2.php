@@ -28,10 +28,11 @@ require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	use xPaw\SourceQuery\SourceQuery;
 	define( 'SQ_TIMEOUT',     $settings['SQ_TIMEOUT'] );
 	define( 'SQ_ENGINE',      SourceQuery::SOURCE );
-	define( 'LOG',	'logs/ajax.log');
+	define( 'LOG',	'logs/ajaxv2.log');
 	define ('cr',PHP_EOL);
 	define ('CR',PHP_EOL);
-	$build = "46611-3909981191";
+	define ('borders',array('horizontal' => '─', 'vertical' => '│', 'intersection' => '┼','left' =>'├','right' => '┤','left_top' => '┌','right_top'=>'┐','left_bottom'=>'└','right_bottom'=>'┘','top_intersection'=>'┬'));
+	$build = "50614-811650629";
 	$version = 2.07;
 error_reporting (0);
 $update_done= array();
@@ -39,7 +40,16 @@ $ip = $_SERVER['SERVER_ADDR']; // get calling IP
 $sql = 'select * from base_servers where base_servers.ip ="'.$_SERVER['REMOTE_ADDR'].'"'; // do we know this ip ? mybb sets this at login
 //echo $sql.'<br>';
 $valid = $database->num_rows($sql); // get result if the ip can use the data the return value >0
-
+if ($_SERVER['SERVER_ADDR'] == $_SERVER['REMOTE_ADDR'] ){$valid=1;}
+if (isset($_SERVER['HTTP_PHPGSM_AUTH']) and $_SERVER['REMOTE_ADDR'] == $_SERVER['SERVER_ADDR']) {
+                        //$cmds['valid'] = true;
+                        $HTTP_AUTH =' HTTP_AUTH on ';
+                         //file_put_contents(LOG,$logline,FILE_APPEND);
+                        //echo 'auth on'.cr;
+                        }
+                        else{
+							$HTTP_AUTH = ' insecure requst ';
+						}
 if(is_cli()) {
 	$valid = 1; // we trust the console
 	$sec = true;
@@ -84,8 +94,8 @@ foreach ($cmds as $k=>$v) {
 	//
 	$entry .="$k=>$v ";
 }
-$rip = $_SERVER['REMOTE_ADDR'];
-$logline = date("d-m-Y H:i:s")." $rip Valid = $valid method = $method cmds = $entry".cr;
+//$rip = $_SERVER['REMOTE_ADDR'];
+$logline = date("d-m-Y H:i:s")." $rip Valid = $valid method = $method cmds = $entry$HTTP_AUTH".print_r($_SERVER,true).cr;
 file_put_contents(LOG,$logline,FILE_APPEND);
 // do what's needed
 	switch (strtolower($cmds['action'])) {
@@ -138,11 +148,22 @@ file_put_contents(LOG,$logline,FILE_APPEND);
 				
 		case "get_file" :
 			if (isset($cmds['post'])) {
-				file_put_contents(LOG,print_r($cmds,true),FILE_APPEND);
+				$logline = "POST";
+				foreach ($cmds as $k =>$v) {
+					//
+					$logline .= " $k => $v".cr;
+				}
+				file_put_contents(LOG,$logline,FILE_APPEND);
 				file_put_contents($cmds['file'],$cmds['data']);
+				
 			}
 			
-			else { 
+			else {
+				$logline= "GET";
+				foreach ($cmds as $k => $v) {
+					$logline .= " $k => $v".cr;
+				}
+				   file_put_contents(LOG,$logline,FILE_APPEND); 
 					echo file_get_contents($cmds['file']);
 				}
 			exit;	
@@ -170,6 +191,11 @@ file_put_contents(LOG,$logline,FILE_APPEND);
 				if (isset($cmds['email'])) {
 					echo 'email set'.cr;
 				}	
+				    $logline = "SCANLOG";
+				    foreach ($cmds as $k => $v) {
+					$logline .= " $k => $v".cr;
+				}
+				   file_put_contents(LOG,$logline,FILE_APPEND); 
 					echo scanlog($cmds);
 					exit;
 		case "top" :
@@ -371,11 +397,18 @@ function game_detail() {
 			else {
 					$host= gethostname();
 					$ip = gethostbyname($host);
-					$ip = geturl('https://api.ipify.org');
+					$localIP = trim(shell_exec('hostname -I'));
+	                $localIPs = explode(' ',$localIP);
+	                //print_r($localIPs);
+					//$ip = geturl('https://api.ipify.org');
 					if (empty($ip)) { $ip = geturl('http://ipecho.net/plain');}
 				}
 				//$checkip = substr($ip,0,strlen($ip)-1);
+				if(empty($ip)) {
+					$ip= trim(shell_exec("hostname -I | awk '{print $1}'"));
+				}
 				$checkip = $ip; 
+				//if($cmds['debug']='true') {echo "checkip=$ip";}
 				// alter this bit	
 				// use screen to test 	
 				exec('ps -C screen -o pid,cmd |sed 1,1d',$tmp,$val); // this gets running only needs rework may 2021
@@ -387,7 +420,9 @@ function game_detail() {
 						
 						//$sql =  'SET sql_mode = \'\'';
 						//$a= $db->query( 'SET sql_mode = \'\''); 
-						$sql ='select  servers.location,count(*) as total from servers where servers.host like "'.$checkip.'%"';
+						
+							$sql ='select  servers.location,count(*) as total from servers where servers.host like "'.$checkip.'%"';
+						
 						//echo $sql;
 						$server_count = $db->get_row($sql);
 						if (empty($server_count['location'])) {
@@ -400,7 +435,24 @@ function game_detail() {
 				}
 			else{
 						// here we have the runners in $tmp array
-						$sql = 'select * from server1 where host like "'.$checkip.'%" and enabled=1 order by server_name ASC';
+						if (count($localIPs) >1) {
+							//
+							 $sql = "select * from server1 where ";
+							foreach ($localIPs as $lip) {
+								// glue the sql together with $sql = "select * from server1 where (host like \"185%\") or (host like \"109%\") and enabled=1 order by server_name ASC";
+								if(!isset($subsql)) {
+									$subsql = '(host like "'.$lip.'") ';
+								}
+								else {
+									$subsql .=  'or (host like "'.$lip.'") ';
+									// more
+								} 
+							}
+							$sql .=$subsql." and enabled=1 order by server_name ASC";
+						}
+						else {
+							$sql = 'select * from server1 where host like "'.$checkip.'%" and enabled=1 order by server_name ASC';
+						}
 						//$sql = "SELECT DISTINCT `host_name`,`server_name`,`url`,`bport`,`location`,`host`,`port`,`running` FROM server1 where `running` = 1 order by `host_name`";
 						$servers = $db->get_results($sql);
 						$server_count = $db->num_rows($sql);
@@ -516,14 +568,21 @@ function exescreen ($cmds) {
 	global $database;
 	$exe =$cmds['server'];
 	$localIP = getHostByName(getHostName()); // carefull if the hostname is set to 127.0.0.1
-	$sql = 'select * from server1 where host_name = "'.trim($exe).'"';
+	$localIP = trim(shell_exec('hostname -I'));
+	$localIPs = explode(' ',$localIP);
+	$key = array_search($exe, $localIPs);
+	$sql = 'select * from server1 where host_name like "'.trim($exe).'"';
 	$server = $database->get_row($sql); // pull results
+	$key = array_search($server['host'], $localIPs);
+	//if (!empty($key)) {$localIP = $localIPs[$key];}
+	$localIP = $localIPs[$key];
 	if (empty($server['host'])) {
-		$return = 'invalid server'; // don't know this server
+		$return = "invalid server $exe"; // don't know this server
 	   	return $return;
 	}
 	if ($server['host'] <> $localIP) {
-		return 'This Server is not hosted here '.$localip.'/'.$server['host']; // we know this one but it's elsewhere
+		$choices = print_r($localIPs,true);
+		return "This Server is not hosted here $localip /".$server['host']." choices are $choices the key was $key"; // we know this one but it's elsewhere
 	}
 	// valid so do it
 	switch ($server['binary_file']) {
@@ -660,7 +719,7 @@ function exescreen ($cmds) {
 function exe($cmds) {
 	// run a command this array needs to be in a settings file
 	
-	$allowed = array('scanlog.php','cron_u.php','cron_r.php'.'check_ud.php','steamcmd','tmpreaper');
+	$allowed = array('scanlog.php','cron_u.php','cron_r.php','check_ud.php','steamcmd','tmpreaper', 'sudo','cron_scan.php');
 	foreach ($allowed as $find) {
        if (strpos($cmds['cmd'], $find) !== FALSE ) { 
         //echo $cmds['cmd']." Match found".cr; 
@@ -765,6 +824,7 @@ function viewserver($cmds) {
 		$Query = new SourceQuery( );
 		$emoji = new Emoji;
 		$sql = 'select * from server1 where host_name like "'.$cmds['id'].'"';
+		file_put_contents('sql.txt',$sql);
 		$server =$database->get_row($sql);
 		
 try 
@@ -778,7 +838,7 @@ $rules = $Query->GetRules( );
 					{
 						$Exception = $e;
 						if (strpos($Exception,'Failed to read any data from socket')) {
-							$Exception = 'Failed to read any data from socket (Function viewplayers)';
+							$Exception = $Exception.' Failed to read any data from socket (Function viewplayers)';
 						}
 						
 						  $error = date("d/m/Y h:i:sa").' ('.$cmds['ip'].':'.$cmds['port'].') '.$Exception;
@@ -797,7 +857,7 @@ if (count($players)) {
 		//loop  add flag & country $v being the player array 
 		// don't update player here let scanlog do it
 		$players[$k]['Name'] =$emoji->Encode($v['Name']);
-		$player_data = $database->get_results($sql.$database->escape($players[$k]['Name']).'"');
+		$player_data = $database->get_results($sql.$database->escape($players[$k]['Name']).'"'); // player info from db
 		if (!empty($player_data)) {
 			// here we go
 			//echo 'Result '.print_r($player_data,true).cr;
@@ -805,6 +865,8 @@ if (count($players)) {
 			$players[$k]['Name'] = Emoji::Decode($players[$k]['Name']);
 			$players[$k]['flag'] = 'src ="https://ipdata.co/flags/'.trim(strtolower($player_data['country_code'])).'.png"'; // windows don't do emoji flags use image 
 			$players[$k]['country'] = $player_data['country'];
+			$players[$k]['steam_id'] = $player_data['steam_id64']; // user steam_id
+			$players[$k]['ip'] = long2ip($player_data['ip']); // recorded ip address
 		}
 		else {
 			// no current flag or country
@@ -828,6 +890,8 @@ function readlog($cmds) {
 	if (!isset($cmds['rows'])) {
 		$cmds['rows']= 10;
 	}
+	//$table = new table(CONSOLE_TABLE_ALIGN_CENTER,borders,2,null,true,CONSOLE_TABLE_ALIGN_CENTER);
+	//$table->setHeaders(array("User ID/IP","Period"));
 	//convert readlog to ajax function
 	$ip = file_get_contents('https://api.ipify.org');// get ip
 	if (empty($ip)) { $ip = file_get_contents('http://ipecho.net/plain');} 
@@ -839,10 +903,10 @@ function readlog($cmds) {
 	if ($ip <> $server['host']) {
 		$url = $server['url'].':'.$server['bport'].'/ajaxv2.php?action=get_file&file='.$filename;
 		if (isset($cmds['debug'])) {echo '[url] => '.$url.cr;}
-		$log_contents = file_get_contents($url);
+		$log_contents = geturl($url);
 	}
 	else {
-		$log_contents = file_get_contents($filename);
+		$log_contents = file_get_contents($filename); // local file
 	}
 	$log_contents = array_reverse(explode(cr,trim($log_contents)));
 	//print_r($log_contents);
@@ -854,6 +918,9 @@ function readlog($cmds) {
 		$v = preg_replace('/<[U:1:[0-9]+]>/', ' ', $v);
 		$v = preg_replace('/</',' ',$v);
 		$v = preg_replace('/>/',' ',$v);
+		if ($v == 'say admin') {
+			// show admin names
+		}
 		$date ='L '. date("m/d/Y");
 		
 		if (is_cli()) {
@@ -883,9 +950,25 @@ function readlog($cmds) {
 			$v = str_replace('disconnected',' <span style="color:#ffbf00;"><b>dissconnected</b></span> ',$v);
 			$v = str_replace('Writing ','<span style="color:green"><b>Writing </b></span>',$v);
 			$v = str_replace('Unknown command','<span style="color:red"><b>Unknown command </b></span>',$v);
+			$v = str_replace('listip','<span style="color:blue"><b>List Banned IP\'s </b></span>',$v);
+			$v = str_replace('listid','<span style="color:green"><b>List Banned ID\'s </b></span>',$v);
+			if (strpos($v,' filter list:') == true) {
+				$data = explode(':',$v);
+				$v =trim($data[1]);
+				$count = intval($v);
+				$v=$count;
+				}
+			if (strpos($v,': permanent') or strpos($v,'.000 min')) {
+				// do ban lines
+				$data = explode(':',$v);
+				$v =  "count = $count ".print_r($data,true);
+			}	
 			$v = str_replace('"','',$v); // knock out "
 		}
-		$return[] = $v;
+		
+		if(!empty($v)) {
+			$return[] = $v;
+		}
 	}
 	return array_reverse($return);	// send the data back in the right order !
 }
@@ -1037,18 +1120,24 @@ else {
 			if (isset($cmds['debug']) && $cmds['debug'] == 'true') {
 				echo 'no file & server remote'.cr;
 			}
+			$new_path =  $run['url'].':'.$run['bport'].'ajax_send.php?url='.$run['bport'].'/ajaxv2.php&query=action=get_file:file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log';
+			$logline = date("d-m-Y H:i:s")." $rip Valid = $valid method = $method url = $new_path remote $HTTP_AUTH".cr;
+			file_put_contents(LOG,$logline,FILE_APPEND);
 			$path = $run['url'].':'.$run['bport'].'/ajax.php?action=get_file&file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log';
 		}
 		else {
 			if (isset($cmds['debug']) && $cmds['debug'] == 'true') {
 				echo 'file & server remote'.cr;
 			}
-			$path = $run['url'].':'.$run['bport'].'/ajax.php?action=get_file&file='.$cmds['file'];
+			$new_path =  $run['url'].':'.$run['bport'].'ajax_send.php?url='.$run['url'].':'.$run['bport'].'/ajaxv2.php&query=action=get_file:file='.$cmds['file'];
+			$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=get_file&file='.$cmds['file'];
+			$logline = date("d-m-Y H:i:s")." $rip Valid = $valid method = $method url = $new_path  local $HTTP_AUTH".cr;
+			file_put_contents(LOG,$logline,FILE_APPEND);
 		}
 	}
 		
 		
-		$tmp = getul($path);
+		$tmp = getul($new_path);
 		$tmp = array_reverse(explode(cr,trim($tmp)));
 		$current_records = count($tmp) ;
 				
@@ -1412,7 +1501,7 @@ function get_pid($task) {
 	if ($cmds['debug'] == true) {
 		//echo print_r($a,true).cr;
 		//echo 'used ss -plt |grep '.$task.cr;
-		echo $matches[0].cr;
+		echo "get_Pid $matches[0]".cr;
 	}
 	return $matches[0];
 }

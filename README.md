@@ -20,4 +20,5 @@ Written in PHP as a MyBB extension
 The Mybb part of this project has been added to this repository yet, updates will be added in due course.
 </p>
 <p><b>Please Note</b><br>This software will <ins>NOT</ins> work if you have cyberpanel installed to control your server/vps</p> 
-<p>Download the master branch for a working copy.</p>
+<p>Download <a href="https://github.com/NoIdeer/PHPgsm/archive/refs/heads/master.zip">from here for a stable version.</a></p>
+<p>Documentation is not finished but is <a href="https://code.noideersoftware.co.uk/forum-18.html">here</a></p>

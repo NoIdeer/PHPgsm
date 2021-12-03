@@ -26,18 +26,27 @@
  //header('Access-Control-Allow-Origin: *');
  require_once 'includes/master.inc.php';
  define ('VERSION', 2.01);
-	$build = "4975-603833088";
+	$build = "5176-3749747768";
  define ('cr', PHP_EOL);
  define ('br','<br/>');
+ if(is_cli()) {
+	 //die('running from command'.cr);
+	 $file= $argv[1];
+	 $id = $argv[2];
+	 $_GET['lines'] = $argv[3];
+	 $filename = $file.'/log/console/'.$id.'-console.log';
+ }
+ if(!isset($file)) {
 $file = $_GET['path'];
 $filename = $file.'/log/console/'.$_GET['id'].'-console.log';
+}
 $result = array();
 clearstatcache(true, $filename);
 $data['time']    = filemtime($file);
 $data['content'] = $_GET['time'] < $data['time']
     ? getLastLines($filename,$_GET['lines'])
     : false;
-
+print_r($data['content']);
 foreach ($data['content'] as $k => $v ) {
 	$x = strpos($v,'" connected, address "');
 	if ($x >0 ) {

@@ -22,7 +22,7 @@
  * 
  * 
  */
-	$shortopts ="d::f:s:v::g::t::li::r:q:l:";
+	$shortopts ="d::f:s:v::g::t::i::r:q:l::m:";
 	$longopts[]="debug::";
 	$longopts[]="help::";
 	$longopts[]="quick::";
@@ -31,12 +31,15 @@
 	$longopts[]="version::";
 	$longopts[]="games::";
 	$longopts[]="details::";
-	$longopts[]="list::";
+	$longopts[] ="module::";
+	$longopts[]="id::";
 	$longopts[]="start:";
 	$longopts[]="restart:";
 	$longopts[] ="quit:";
 	$longopts[]="log:";
 	$options = getopt($shortopts,$longopts);
+	require_once 'includes/master.inc.php';
+    include 'functions.php';
 	
 	define ('options',$options);
 	if(isset($options['debug'])) {
@@ -50,22 +53,18 @@
 		error_reporting(0);
 
 	}
-require_once 'includes/master.inc.php';
-
-include 'functions.php';
 
 require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	use xPaw\SourceQuery\SourceQuery;
 	define( 'SQ_TIMEOUT',     $settings['SQ_TIMEOUT'] );
 	define( 'SQ_ENGINE',      SourceQuery::SOURCE );
 	define( 'LOG',	'logs/ajax.log');
-	$version = 2.05;
+	$version = 2.071;
 	define ('cr',PHP_EOL);
 	define ('CR',PHP_EOL);
-	
-	$build = "23371-3855903511";
-	
-	
+	define ('borders',array('horizontal' => '─', 'vertical' => '│', 'intersection' => '┼','left' =>'├','right' => '┤','left_top' => '┌','right_top'=>'┐','left_bottom'=>'└','right_bottom'=>'┘','top_intersection'=>'┬'));
+	$build = "26003-2303001689";
+		
 	if(is_cli()) {
 	$valid = 1; // we trust the console
 	$sec = true;
@@ -74,7 +73,7 @@ require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	if (debug) {
 		echo 'debug'.cr;
 		error_reporting( -1 );
-		echo 'Cli interface v'.$version.' '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+		//echo 'Cli interface v'.$version.' '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
 		if (isset($cmds)) {
 			foreach ($cmds as $k => $v) {
 				if ($k == 'debug'){continue;}
@@ -92,16 +91,25 @@ else {
 //system('clear');
 $cc = new Color();
 	define ('warning', $cc->convert("%YWarning%n"));
-	define ('error', $cc->convert("%RError  %n"));
+	define ('error', $cc->convert("%RError%n"));
 	define ('advice', $cc->convert("%BAdvice%n"));
-	define ('pass',$cc->convert("%GPassing%n"));
+	define ('pass',$cc->convert("%GPass%n"));
 	define ('fail', $cc->convert("%Y  ✖%n"));
 	$tick = $cc->convert("%g  ✔%n");
     $cross = $cc->convert("%r  ✖%n");
     //print_r($options);
-    if(isset($options['g']) or isset($options['games'])) {$cmds['action']='g';}
+    if(isset($options['g']) or isset($options['games'])) {
+		$cmds['action']='g';
+		
+		}
 	if(isset($options['v']) or isset($options['version'])) {$cmds['action']='v';}
-	if(isset($options['d']) or isset($options['details'])) {$cmds['action']='d';}
+	if(isset($options['d']) or isset($options['details'])) {
+		$cmds['action']='d';
+		if (!empty($options['d'])) {
+			$cmds['option'] = $options['d'][1];
+		}
+		
+		}
 	if(isset($options['t'])) {$cmds['action']='t';}
 	if(isset($options['l']) or isset($options['log']))  {
 		$cmds['action']='l';
@@ -115,7 +123,15 @@ $cc = new Color();
 			$cmds['server'] = 'all';
 		}
 		}
-	if(isset($options['l']) and isset($options['i']) or isset($options['list'])) {$cmds['action']='li';}
+	if(isset($options['i']) or isset($options['id'])) 
+	{
+		if($options['i'] =='g') {
+			$cmds['action'] = 'ig';
+		}
+		else {
+			$cmds['action']='li';
+		}
+		}
 	if(isset($options['server'])) {$cmds['server'] = $options['server'];} 
 	if(isset($options['s']) or isset($options['start'])) {
 		$cmds['action'] = 's';
@@ -145,13 +161,18 @@ $cc = new Color();
 		}
 		}
 	//if(isset($options['q'])) {$cmds['action'] = 'q';}
-	
+	$banner = 'cli v'.$version.'-'.$build.' Noideer Software ©'.date('Y').cr;
+	if ($cmds['action'] <> 'v'){
+		echo $cc->convert("%y$banner%n");
+	}
 	if (empty($cmds['action'])) {help();}
+	//print_r($cmds);
+	//die();
 switch ($cmds['action']) {
 	
 	case 'v' :
 	case 'version':	
-		echo 'Cli interface v'.$version.' '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+		echo $banner;
 	exit;
 	case 'd':
 	case 'details':
@@ -163,20 +184,23 @@ switch ($cmds['action']) {
 	break;
 	case 'l':
 	case 'log':
+	
+	//echo $cmds['server'].cr;
 	if(!isset($cmds['server'])) {
 		echo 'no Server ID supplied'.cr;
 		exit;
 		}
-		if ($cmds['server'] == 'all') {
-			echo 'Quick log scan';
-			$exe = urlencode ('./scanlog.php -sall');
+		if ($cmds['server'] == 'all' || empty($cmds['server'])) {
+			echo $cc->convert("%bLog scan%n").cr;
+			$exe = urlencode ('cron/cron_scan.php -sall --no-email');
 			$cmd = $settings['url'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 			//echo $cmd.cr;
-			$content = file_get_contents($cmd);
+			$content = geturl($cmd);
 			if(empty(trim($content))) {
 			echo cr.'Log(s) up to date'.cr;
 		}
 		else {
+			echo 'Checking '.$cmds['server'].cr;
 			echo "\r$content";
 		}
 			break;
@@ -189,8 +213,8 @@ switch ($cmds['action']) {
 		} 
 		$exe = urlencode ('./scanlog.php  -s'.$server['host_name']);
 		$cmd = $server['url'].':'.$server['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
-		echo 'Full log scan for '.$cmds['server'];
-		$content = file_get_contents($cmd);
+		echo 'Full log scan for '.$cmds['server'].cr;
+		$content = geturl($cmd);
 		if(empty(trim($content))) {
 			echo cr.'Log up to date'.cr;
 		}
@@ -200,13 +224,29 @@ switch ($cmds['action']) {
 		break;
 	case 'li':
 	case 'list':
-			echo 'list server id\'s'.cr;
-			$sql = "select host_name from server1 where enabled = 1 order by host_name";
+			echo $cc->convert("%BList Server ID's%n").cr;
+			$table = new table(CONSOLE_TABLE_ALIGN_CENTER,borders,2,null,true,CONSOLE_TABLE_ALIGN_CENTER);
+			$table->setHeaders(array($cc->convert("%cGame Server ID%n"),$cc->convert("%cServer ID%n"),$cc->convert("%cHost%n"),$cc->convert("%cLocation%n"),$cc->convert("%cOnline%n")));
+			$table->setAlign(0, CONSOLE_TABLE_ALIGN_RIGHT);
+			$table->setAlign(1, CONSOLE_TABLE_ALIGN_RIGHT);
+			$table->setAlign(2, CONSOLE_TABLE_ALIGN_RIGHT);
+			$table->setAlign(3, CONSOLE_TABLE_ALIGN_RIGHT);
+			$sql = "select * from server1 where enabled = 1 order by host_name";
 			$hosts = $database->get_results($sql);
 			//echo print_r($hosts,true).cr;
 			foreach ($hosts as $host) {
-				echo $host['host_name'].cr;
+				//echo $host['host_name'].' '.$host['location'].' '.$host['fname'].' ('.$host['host'].')'.cr;
+				if($host['running'] == 1) {
+					//running
+					$running = $tick;
+				}
+				else {
+					//not running
+					$running = $cross;
+				}
+				$table->addRow(array($host['server_id'],$host['host_name'],$host['fname'].' ('.$host['host'].')',$host['location'],$running));
 			}
+			echo $table->getTable();
 			break;
 	case 'ig':
 	case 'igames':
@@ -228,8 +268,8 @@ switch ($cmds['action']) {
 				break;
 			} 
 			if (empty($cmds['ip']) || !isset($cmds['ip'])) {
-				 $ip = file_get_contents('https://api.ipify.org');// get ip
-				if (empty($ip)) { $ip = file_get_contents('http://ipecho.net/plain');}
+				 $ip = geturl('https://api.ipify.org');// get ip
+				if (empty($ip)) { $ip = geturl('http://ipecho.net/plain');}
 			}
 			exec('utils/check_r.php '.$cmds['game'],$output,$ret);
 			
@@ -290,7 +330,7 @@ switch ($cmds['action']) {
 			break;
 		} 
 		$cmd = $server['url'].':'.$server['bport'].'/ajaxv2.php?action=exescreen&server='.$server['host_name'].'&key='.md5($server['host']).'&cmd=r';
-		echo file_get_contents($cmd).cr;
+		echo geturl($cmd).cr;
 		break;
 	case 's':
 	case 'start':
@@ -305,60 +345,47 @@ switch ($cmds['action']) {
 			break;
 		} 
 		$cmd = $server['url'].':'.$server['bport'].'/ajaxv2.php?action=exescreen&server='.$server['host_name'].'&key='.md5($server['host']).'&cmd=s';
-		echo file_get_contents($cmd).cr;
+		echo geturl($cmd).cr;
 	break;
 	case 't':
 	case'test':
-		$table = new Table(CONSOLE_TABLE_ALIGN_LEFT, array('horizontal' => '', 'vertical' => '', 'intersection' => ''));
+		$table = new table(CONSOLE_TABLE_ALIGN_LEFT,borders,3,null,true,CONSOLE_TABLE_ALIGN_CENTER);
 		$option = $cc->convert("%cFile%n");
-	    $use = $cc->convert("%c\t   Status%n");
-	    $notes = $cc->convert("%c\t\tResult%n");
-	    echo cr;
-	    $table->setHeaders( array ($option,$use,$notes));
-		//$table->addRow(array('','',''));
-		//$table->addRow(array($option,$use,$notes,''));
-		echo $cc->convert("%BFile Integrity Checker%n").cr;
-		
+		$space = chr(032);
+	    $use = $cc->convert("%cStatus%n");
+	    $notes = $cc->convert("%cResult%n");
+	    echo $cc->convert("%BFile Integrity Checker%n").cr;;
+		$table->setHeaders(array($option,$use,$notes));
 		//echo 'doing all php files'.cr;
 			foreach (glob("*.php") as $filename) {
+				$check = check_file($filename);
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				
+		}
+		foreach (glob("cron/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				if ($check['status']) {
-					$table->addRow(array($filename,$check['symbol'],pass.' build '.$check['fsize'].'-'.$check['build']));
-				}
-				else {
-					$table->addRow(array($filename,$check['symbol'],$check['reason']));
-				}
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
 		}
 		foreach (glob("install/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				if ($check['status']) {
-					$table->addRow(array($filename,$check['symbol'],pass.' build '.$check['fsize'].'-'.$check['build']));
-				}
-				else {
-					$table->addRow(array($filename,$check['symbol'],$check['reason']));
-				}
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
 		}
 		foreach (glob("utils/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				if ($check['status']) {
-					$table->addRow(array($filename,$check['symbol'],pass.' build '.$check['fsize'].'-'.$check['build']));
-				}
-				else {
-					$table->addRow(array($filename,$check['symbol'],$check['reason']));
-				}
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
 		}
 		foreach (glob("includes/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				if ($check['status']) {
-					$table->addRow(array($filename,$check['symbol'],pass.' build '.$check['fsize'].'-'.$check['build']));
-				}
-				else {
-					$table->addRow(array($filename,$check['symbol'],$check['reason']));
-				}
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+		}
+		foreach (glob("modules/*.php") as $filename) {
+		
+				$check = check_file($filename);
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
 		}
 		echo $table->getTable();
 		break;
@@ -391,56 +418,61 @@ function help() {
 	$PHP = $cc->convert("%cPHP%n");
 	$gsm = $cc->convert("%rgsm%n");
 	$option = $cc->convert("%cOption%n");
-	$use = $cc->convert("%c\t\tUse%n");
-	$table = new Table(
-    CONSOLE_TABLE_ALIGN_LEFT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-);
-$table->addRow(array('','',''));
-$table->addRow(array($PHP.$gsm.' Help',''));
-$table->addRow(array('Usage : - '.basename($argv[0]).' action=<option> <sub_options>',''));
-$table->addRow(array($option,$use));
-$table->addRow(array('-v or --version','show CLI version & exit'));
-$table->addRow(array('-s or --start <server id>','starts a game server'));
-$table->addRow(array('-q, --quit <server id>','stops a game server'));
-$table->addRow(array('-r, or --restart <server id>','restarts a game server'));
-$table->addRow(array('-d, or --details ','shows details about the running system (takes sub options see example page)'));
-$table->addRow(array('-g, or --games ','shows details on running game servers (takes sub options see example page)'));
-$table->addRow(array('ig, or igames ','Installs a game from Steam (takes sub options see example page)'));
-$table->addRow(array('is, or iserver ','Installs a server from an installed game (takes sub options see example page)'));
-$table->addRow(array('u, or user ','shows user details (takes sub options see example page)'));
-$table->addRow(array('-l, or --log  <server id>','processes server logs, if server id is set to all scans all (default)'));
-$table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can use.'));
+	$use = $cc->convert("%cUse%n");
+	echo $PHP.$gsm.' Help'.cr;
+	echo 'Usage : - '.basename($argv[0]).$cc->convert("%G <option>%n").$cc->convert("%y <sub_options>%n").cr;
+	$table = new Table(CONSOLE_TABLE_ALIGN_LEFT,borders,1,null,true,CONSOLE_TABLE_ALIGN_CENTER);
+	//$table->addRow(array('','',''));
+	$table->setHeaders(array($option,$use));
+	$table->addRow(array('-s or --start <server id>','starts a game server, use -i to find <server id>'));
+	$table->addRow(array('-q, or --quit <server id>','stops a game server'));
+	$table->addRow(array('-r, or --restart <server id>','restarts a game server'));
+	$table->addRow(array('-d','shows details about the running system (takes sub options)'));
+	$table->addRow(array('-g, or --games ','shows details on running game servers (takes sub options)'));
+	//$table->addRow(array('ig, or igames ','Installs a game from Steam (takes sub options see example page)'));
+	//$table->addRow(array('is, or iserver ','Installs a server from an installed game (takes sub options see example page)'));
+	//$table->addRow(array('u, or user ','shows user details (takes sub options see example page)'));
+	$table->addRow(array('-l, or --log  <server id>','processes server logs, if server id is set to all scans all servers'));
+	$table->addRow(array('-i, or --id ','Lists valid server Id\'s that cli can use.'));
+	$table->addRow(array('-v or --version','show version & exit'));
 	 //system('clear');
-	echo 'Cli interface v'.$version.' '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+	//echo 'Cli interface v'.$version.' '.$build.' Copyright Noideer Software '.$settings['start_year'].' - '.date('Y').cr;
+	 
+	 	 //echo $table1->getTable();
+	 $option = $cc->convert("%cSub Options%n");
+	 $use = $cc->convert("%cNotes%n");
+	 $table->addSeparator();
+	 $table->addRow(array($option,$use));
+	 $table->addSeparator();
+	 $table->addRow(array('-dm(option) ','option can be h,d,s,m e.g '.basename($argv[0]).' -dms' ));
+	 $table->addRow(array('-f or --file <file>','no clue on what this can do noideer at all' ));
+	 //$table->setAlign(0, CONSOLE_TABLE_ALIGN_CENTER);
 	 echo $table->getTable();
 	 echo cr;
 	 echo 'cli will only install games or servers on this machine, if you have remotes either use cli on that machine or the web api.'.cr;
 	 echo 'however, you can control remotely installed servers'.cr;
-	 //$answer = ask_question('enter E for examples or q to quit  ',null,null);
-	 echo $answer.cr.cr;
+	
 	 exit;
  }
  
  function details($data) {
 	 // read server details
 	 //system('clear');
+	 //printr($data,true);
 	 if (empty($data['option']) || !isset($data['option'])) {
 		 $data['option'] = 'a';
 	 }
 	 $cc = new Color();
-	 $sw = $cc->convert("%W   Modules%n");
-	 $sa = $cc->convert("%W    Server%n");
-	 $ha = $cc->convert("%W    Hardware%n");
-	 $ma = $cc->convert("%W    Memory%n");
-	 $da = $cc->convert("%W     Boot Disk%n");
-	 $da1 = $cc->convert("%W     Data Disk%n");
+	 $sw = $cc->convert("%WModules%n");
+	 $sa = $cc->convert("%WServer%n");
+	 $ha = $cc->convert("%WHardware%n");
+	 $ma = $cc->convert("%WMemory%n");
+	 $da = $cc->convert("%WBoot Disk%n");
+	 $da1 = $cc->convert("%WData Disk%n");
+	 $da2 = $cc->convert("%WRoot Disk%n");
 	 if($data['option'] =='h' || $data['option'] =='a') {
 		 //
-		  $table = new Table(
-    CONSOLE_TABLE_ALIGN_LEFT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-    );
+		  $table = new Table(CONSOLE_TABLE_ALIGN_LEFT,'',4,null,true);
 		$cpu_info = get_cpu_info();
 		 echo $cc->convert("%BHardware Information%n").cr;
 		 $table->addRow(array($ha,''));
@@ -451,7 +483,7 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 		 $table->addRow(array($cc->convert("%y\tCpu Speed%n"),$cpu_info['cpu_MHz'].' MHz'));
 		 $table->addRow(array($cc->convert("%y\tCpu Cache%n"),$cpu_info['cache_size']));
 		 $table->addRow(array($cc->convert("%y\tCpu Load%n"),$cpu_info['load']));
-		 $table->addRow(array($cc->convert("%y\tIP Address %n"),$cpu_info['local_ip']));
+		 $table->addRow(array($cc->convert("%y\tIP Address(es) %n"),$cpu_info['ips']));
 		 $table->addRow(array($cc->convert("%y\tProcesses%n"),$cpu_info['process']));
 		 $table->addRow(array($cc->convert("%y\tReboot Required%n"),$cpu_info['reboot']));
 		 echo $table->getTable();
@@ -459,25 +491,24 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 	 }
 	  if($data['option'] =='m' || $data['option'] =='a') {
 		 //
-		  $table = new Table(
-    CONSOLE_TABLE_ALIGN_LEFT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-    );
+		  $table = new table(CONSOLE_TABLE_ALIGN_LEFT,'',4,null,true,CONSOLE_TABLE_ALIGN_CENTER);
 		$mem_info = get_mem_info();
 		echo $cc->convert("%BMemory Information%n").cr;
-		$table->addRow(array($ma,''));
-		$table->addRow(array('',$cc->convert("%BTotal"),"\t\t Free","  Cached",$cc->convert(" Active%n")));
-		$table->addRow(array(trim($cc->convert("%y    Mem%n")),"\t\t".$mem_info['MemTotal'],"\t".$mem_info['MemFree']," ".$mem_info['Cached'],"  ".$mem_info['Active']));
-		$table->addRow(array($cc->convert("%y   Swap%n"),"\t\t".$mem_info['SwapTotal'], "\t".$mem_info['SwapFree'],$mem_info['SwapCached']));
+		//$table->addRow(array($ma,''));
+		$table->setheaders(array($ma,$cc->convert("%BTotal"),"Free","Cached",$cc->convert("Active%n")));
+		$table->addRow(array($cc->convert("%y      Real%n"),$mem_info['MemTotal'],$mem_info['MemFree'],$mem_info['Cached'],$mem_info['Active']));
+		$table->addRow(array($cc->convert("%y      Swap%n"),$mem_info['SwapTotal'], $mem_info['SwapFree'],$mem_info['SwapCached']));
+		$table->setAlign(0, CONSOLE_TABLE_ALIGN_RIGHT);
+		 $table->setAlign(1, CONSOLE_TABLE_ALIGN_RIGHT);
+		 $table->setAlign(2, CONSOLE_TABLE_ALIGN_RIGHT);
+		 $table->setAlign(3, CONSOLE_TABLE_ALIGN_RIGHT);
+		 $table->setAlign(4, CONSOLE_TABLE_ALIGN_RIGHT);
 		echo $table->getTable();
 		echo cr;
 	}
 	  if($data['option'] =='d' || $data['option'] =='a') {
 		 //
-		  $table = new Table(
-    CONSOLE_TABLE_ALIGN_LEFT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-    );
+		  $table = new Table(CONSOLE_TABLE_ALIGN_LEFT,'',4,null,true);
 		$disk_info = get_disk_info();
 		echo $cc->convert("%BDisk Information%n").cr;
 		$table->addRow(array($da,''));
@@ -495,14 +526,19 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 			$table->addRow(array($cc->convert("%y\tDisk Used%n"),$disk_info['home_used'].' ('.$disk_info['home_pc'].')'));
 			$table->addRow(array($cc->convert("%y\tDisk Free%n"),$disk_info['home_free']));
 		}
+		if(isset($disk_info['root_filesystem'])) {
+			$table->addRow(array($da1,''));
+			$table->addRow(array(trim($cc->convert("%y\tFile System%n")),$disk_info['root_filesystem']));
+			$table->addRow(array($cc->convert("%y\tMount Point%n"),$disk_info['root_mount']));
+			$table->addRow(array($cc->convert("%y\tDisk Size%n"),$disk_info['root_size']));
+			$table->addRow(array($cc->convert("%y\tDisk Used%n"),$disk_info['root_used'].' ('.$disk_info['root_pc'].')'));
+			$table->addRow(array($cc->convert("%y\tDisk Free%n"),$disk_info['root_free']));
+		}
 		echo $table->getTable();
 		echo cr;
 	}
 	 if($data['option'] =='s' || $data['option'] =='a') {
-	 $table = new Table(
-    CONSOLE_TABLE_ALIGN_LEFT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-    );
+	 $table = new Table(CONSOLE_TABLE_ALIGN_LEFT,"",4,null,true);
     $database= new db();
     $software = get_software_info($database);
     //echo print_r($data,true).cr;
@@ -538,16 +574,13 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 	 		//system('clear');
 	 		$Query = new SourceQuery( );
 	 		$cc = new Color();
-	 			  $table = new Table(
-    CONSOLE_TABLE_ALIGN_RIGHT,
-    array('horizontal' => '', 'vertical' => '', 'intersection' => '')
-    );
+	 		$table = new Table(CONSOLE_TABLE_ALIGN_CENTER,borders,4,null,true,CONSOLE_TABLE_ALIGN_CENTER);
 	$database = new db(); // connect to database
 	$sql = 'select * from servers where enabled ="1" and running="1" order by servers.host_name'; //select all enabled & running recorded servers
     $res = $database->get_results($sql); // pull results
     //echo print_r($res,true).cr;
     //^[[0;34mblue^[[0m
-    $table->addRow(array("\t\tServer", "\tStarted"," Online\tCurrent Map"));
+    $table->setheaders(array($cc->convert("%cServer%n"), $cc->convert("%cStarted%n"),$cc->convert("%cPlayers Online%n"),$cc->convert("%cCurrent Map%n")));
     echo $cc->convert("%BGame Server Information%n").cr;
     foreach ($res as $gdata) {
 		 //echo print_r($gdata,true).cr;
@@ -583,12 +616,20 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 			$p1 = trim($info['Players']);
 		$info['Players'] = $cc->convert("%Y$p1%n");
 		}
+		$info['MaxPlayers'] = $cc->convert("%b".$info['MaxPlayers']."%n");
+		if ($info['MaxPlayers'] <10){
+			$info['MaxPlayers'] = $info['MaxPlayers'].' ';
+		}
 	$playersd =$info['Players'].'/'.$info['MaxPlayers'];
 	//echo $playersd.cr;
-	$host = $cc->convert("%y".$info['HostName']."%n");
-	$table->addRow(array('',$host,date('g:ia \o\n l jS F Y \(e\)',"\t".$gdata['starttime'])."\t",$playersd,"\t".$info["Map"].""));
+	$host = $cc->convert("%y".$info['HostName']."%n")	;
+	$start_date =date('g:ia \o\n l jS F Y \(e\)',$gdata['starttime']);
+	$table->addRow(array($host,$start_date,$playersd,$info["Map"]));
 	//printf($headmask,"\e[38;5;82m".$info['HostName'],"\e[97m started at",date('g:ia \o\n l jS F Y \(e\)', $data['starttime']),"Players Online ".$playersd." Map - ".$info["Map"]);
 	}
+	$table->setAlign(0, CONSOLE_TABLE_ALIGN_RIGHT);
+	$table->setAlign(3, CONSOLE_TABLE_ALIGN_RIGHT);
+	//$table->setAlign(2, CONSOLE_TABLE_ALIGN_RIGHT);
 	echo $table->getTable();
     exit;
  }
@@ -596,6 +637,8 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
  function check_file($file_name) {
 	  // test file
 	global $tick,$cross;
+	$cc = new Color; 
+	$return=array();
 	if(is_file($file_name) == false){
 		echo error.' Could not find '.$file_name.cr;
 		$return['reason'] = ' Could not find ';
@@ -605,34 +648,41 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 	}
 	
 	$file = file_get_contents($file_name);
-	$fsize = filesize($file_name);
+	$fsize = filesize($file_name)+1;
 	$nf = explode(cr,$file);
 	$matches = array_values(preg_grep('/\$build = "\d+-\d+"/', $nf));
 	$v = array_values(preg_grep('/\$version = "\d+.\d+"/', $nf));
 	if (empty($matches)) {
 	//echo error.' unable to check '.$file_name.' file structure is incorrect'.$cross.cr;
-	$return['reason'] = error.' unable to check, the file structure is incorrect';
+	$return['file_name'] = $file_name;
+	$return['reason'] = error." Unable To Check ! The file structure is incorrect";
 	$return['symbol'] = $cross;
 	$return['status'] = false;
 	$return['fsize'] = $fsize;
 	$return['build'] ='';
 	return $return;
 	}
-	//echo 'file '.$file_name.' - '.$matches[0];
-	$tmp = str_replace($matches[0],'',$file);
-    $ns = crc32($tmp);
-    //echo 'file '.$file_name.' - '.$matches[0].' '.$ns.cr;
-	$build = trim($matches[0]);
+	//echo 'file '.$file_name.' - '.$matches[0].cr;
+	$oldbp = strpos($file,'$build');
+	$eol = strpos($file,';',$oldbp);
+	$build = substr($file,$oldbp,$eol-$oldbp);
+	$tmp = substr_replace($file,'',$oldbp,$eol-$oldbp);
+	$ns = crc32($tmp);
+    $length= strlen($tmp);
+    //echo 'file '.$file_name.' - '.$tmp.' '.$ns.cr;
+	//$build = trim($matches[0]);
 	$build = str_replace('$build = "','',$build);
-	$build = str_replace('";','',$build);
+	$build = str_replace('"','',$build);
 	$b_detail = explode('-',$build);
-	
-	if ($b_detail[0] == $fsize and $ns == $b_detail[1]) {
+	//echo print_r($b_detail,true).cr;
+	//echo "\$fsize = $fsize \$ns = $ns strlen = $length".cr;
+	if ($b_detail[0] == $length and $ns == $b_detail[1]) {
 		
 		//echo advice.' '.$file_name.$tick.cr;
-		$return['reason'] = 'file Passed';
+		$return['file_name'] = $file_name;
+		$return['reason'] = pass ;//." File Passed Integrity Check";
 		$return['symbol'] = trim($tick);
-		$return['status'] = true;
+		$return['status'] = 1;
 		$return['fsize'] = $fsize;
 		$return['build'] = $ns;
 		return $return;
@@ -640,9 +690,10 @@ $table->addRow(array('-li, or --list ','Lists valid server Id\'s that cli can us
 	else {
 		//echo $file_name.' has an error !, it\'s not as we coded it  '.cr;
 		//echo 'have you editied the file ? If so you need to re install a correct copy.'.cr;
-		$return['reason'] = warning.' fails check, file has altered ';
+		$return['file_name'] = $file_name;
+		$return['reason'] = warning." File has altered !";
 		$return['symbol'] = fail;
-		$return['status'] = false;
+		$return['status'] = 2;
 		$return['fsize'] = $fsize;
 		$return['build'] = $ns;
 		return $return;
