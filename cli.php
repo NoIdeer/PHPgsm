@@ -59,11 +59,11 @@ require DOC_ROOT. '/xpaw/SourceQuery/bootstrap.php'; // load xpaw
 	define( 'SQ_TIMEOUT',     $settings['SQ_TIMEOUT'] );
 	define( 'SQ_ENGINE',      SourceQuery::SOURCE );
 	define( 'LOG',	'logs/ajax.log');
-	$version = 2.071;
+$version = "2.071";
 	define ('cr',PHP_EOL);
 	define ('CR',PHP_EOL);
 	define ('borders',array('horizontal' => '─', 'vertical' => '│', 'intersection' => '┼','left' =>'├','right' => '┤','left_top' => '┌','right_top'=>'┐','left_bottom'=>'└','right_bottom'=>'┘','top_intersection'=>'┬'));
-	$build = "26003-2303001689";
+$build = "27144-6480449994";
 		
 	if(is_cli()) {
 	$valid = 1; // we trust the console
@@ -161,7 +161,7 @@ $cc = new Color();
 		}
 		}
 	//if(isset($options['q'])) {$cmds['action'] = 'q';}
-	$banner = 'cli v'.$version.'-'.$build.' Noideer Software ©'.date('Y').cr;
+	$banner = "cli v $version-$build Noideer Software ©".date('Y').cr;
 	if ($cmds['action'] <> 'v'){
 		echo $cc->convert("%y$banner%n");
 	}
@@ -354,38 +354,39 @@ switch ($cmds['action']) {
 		$space = chr(032);
 	    $use = $cc->convert("%cStatus%n");
 	    $notes = $cc->convert("%cResult%n");
+	    $v = $cc->convert("%cVersion%n");
 	    echo $cc->convert("%BFile Integrity Checker%n").cr;;
-		$table->setHeaders(array($option,$use,$notes));
+		$table->setHeaders(array($option,$use,$notes,$v));
 		//echo 'doing all php files'.cr;
 			foreach (glob("*.php") as $filename) {
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 				
 		}
 		foreach (glob("cron/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 		}
 		foreach (glob("install/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 		}
 		foreach (glob("utils/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 		}
 		foreach (glob("includes/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 		}
 		foreach (glob("modules/*.php") as $filename) {
 		
 				$check = check_file($filename);
-				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason']));
+				$table->addRow(array($check['file_name'],$check['symbol'],$check['reason'],$check['full_version']));
 		}
 		echo $table->getTable();
 		break;
@@ -652,7 +653,22 @@ function help() {
 	$nf = explode(cr,$file);
 	$matches = array_values(preg_grep('/\$build = "\d+-\d+"/', $nf));
 	$v = array_values(preg_grep('/\$version = "\d+.\d+"/', $nf));
-	if (empty($matches)) {
+	$v1 = array_values(preg_grep('/\$version = "\d+.\d+.\d+"/', $nf));
+	if (!empty($v)) {
+	//print_r($v);
+	$version = trim(str_replace('$version = "','',$v[0]));
+	$version = trim(str_replace('";','',$version));
+	//echo $version.cr;
+	//print_r($matches);
+	}
+	if (!empty($v1)) {
+	//print_r($v);
+	$version = trim(str_replace('$version = "','',$v1[0]));
+	$version = trim(str_replace('";','',$version));
+	//echo $version.cr;
+	//print_r($matches);
+	}
+	if (empty($matches) and empty($version)) {
 	//echo error.' unable to check '.$file_name.' file structure is incorrect'.$cross.cr;
 	$return['file_name'] = $file_name;
 	$return['reason'] = error." Unable To Check ! The file structure is incorrect";
@@ -660,8 +676,10 @@ function help() {
 	$return['status'] = false;
 	$return['fsize'] = $fsize;
 	$return['build'] ='';
+	$return['full_version'] = $version;
 	return $return;
 	}
+	
 	//echo 'file '.$file_name.' - '.$matches[0].cr;
 	$oldbp = strpos($file,'$build');
 	$eol = strpos($file,';',$oldbp);
@@ -676,15 +694,27 @@ function help() {
 	$b_detail = explode('-',$build);
 	//echo print_r($b_detail,true).cr;
 	//echo "\$fsize = $fsize \$ns = $ns strlen = $length".cr;
+	if (!empty($version) and empty($matches)) {
+	$return['file_name'] = $file_name;
+	$return['reason'] = pass.", user configured file";
+	$return['symbol'] = $tick;
+	$return['status'] = true;
+	$return['fsize'] = $fsize;
+	$return['build'] ='';
+	$return['full_version'] = "$version-$fsize-$ns";
+	return $return;
+	}	
 	if ($b_detail[0] == $length and $ns == $b_detail[1]) {
 		
 		//echo advice.' '.$file_name.$tick.cr;
 		$return['file_name'] = $file_name;
-		$return['reason'] = pass ;//." File Passed Integrity Check";
+		$return['reason'] = pass .", File is up to date";
 		$return['symbol'] = trim($tick);
 		$return['status'] = 1;
 		$return['fsize'] = $fsize;
 		$return['build'] = $ns;
+		$return['version'] = $version;
+		$return['full_version'] = "$version-$fsize-$ns";
 		return $return;
 	}
 	else {
@@ -696,6 +726,8 @@ function help() {
 		$return['status'] = 2;
 		$return['fsize'] = $fsize;
 		$return['build'] = $ns;
+		$return['version'] = $version;
+		$return['full_version'] = "$version-$fsize-$ns";
 		return $return;
 	}
 }
