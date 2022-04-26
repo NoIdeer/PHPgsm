@@ -24,8 +24,6 @@
 require ('includes/master.inc.php');
 include ('functions.php');
 // map ajaxv21.php to somewhere else (so ajaxv21.php's actual file name & location is only known to this script )
-//print_r($settings);
-//print_r($_SERVER);
 //$cmds =convert_to_argv($argv,"",true);
 $version = "1.012";
 	$build = "2519-2682779641";
@@ -65,9 +63,19 @@ if (isset($cmds['debug'])) {
 	echo "cmd = $cmd".cr;
 }
 $options['phpgsm-auth'] = "true";
-if ($query['output'] == 'xml'){header('Content-Type: text/xml');}
-if ($query['output'] == 'json') {header('Content-Type: application/json');}
-echo geturl($cmd,$settings['secure_user'],$settings['secure_password'],$options,$query); //password set file
+if(isset($query['output'])) {
+	if ($query['output'] == 'xml'){header('Content-Type: text/xml');}
+	if ($query['output'] == 'json') {header('Content-Type: application/json');}
+}
+	
+//echo $cmd.'<br>';
+//print_r($options);
+//echo '<br>';
+//print_r($query);
+//echo '<br>';
+//echo geturl($cmds,'','',$options,$query);
+//die();
+echo geturl($cmd,null,null,$options,$query); //password set file
 
 function split_query($query) {
 	// split up query

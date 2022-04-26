@@ -1,6 +1,6 @@
 <?php
 //echo 'functions 1.04';
-	$version = "2.041";
+	$version = "2.042";
 	$build = "39171-3654919592";	
 if (isset($argv)) {
 		$runfile = basename($argv[0]);
@@ -14,10 +14,11 @@ function get_boot_time() {
     $tmp = explode(' ', file_get_contents('/proc/uptime'));
    
 //Combined
-$days = floor($tmp[0]/86400);
-$hours = floor($tmp[0] / 3600);
-$mins = floor(($tmp[0] - ($hours*3600)) / 60);
-$secs = floor($tmp[0] % 60);
+$value = intval($tmp[0]);
+$days = floor($value/86400);
+$hours = floor($value / 3600);
+$mins = floor(($value - ($hours*3600)) / 60);
+$secs = floor($value % 60);
 if($days>0){
           //echo $days;exit;
           $hours = $hours - ($days * 24);
@@ -176,7 +177,14 @@ function get_cpu_info() {
 	//get cpu info & return as array
 	global $settings;
 	$cpu = file('/proc/cpuinfo');
-		
+	exec('lscpu',$tmp,$ret);
+	foreach ($tmp as $k => $v) {
+		$tmpline = explode(':',$v);
+		$key = str_replace(' ','_',$tmpline[0]);
+		$key = str_replace(['(',')'],'',$key);
+		$cpu2[trim(strtolower($key))] = trim($tmpline[1]);
+	}
+	//print_r($cpu2); 	
 		foreach ($cpu as &$value) {
 			//read data
 			$i = strpos($value,":",0);
@@ -192,12 +200,18 @@ function get_cpu_info() {
 		}
 		$cpu_info['processors'] = trim(shell_exec(" grep -c ^processor /proc/cpuinfo")); // count processors
 		$load = sys_getloadavg();
+		$cpu_info['load_1_min'] = number_format($load[0],2);
+		$cpu_info['load_10_min'] = number_format($load[1],2);
+		$cpu_info['load_15_min'] = number_format($load[2],2);
+		$cpu_info['load_1_min_pc'] = ($load[0]*100)/$cpu2['cpus'];
+		$cpu_info['load_10_min_pc'] = ($load[1]*100)/$cpu2['cpus'];
+		$cpu_info['load_15_min_pc'] = ($load[2]*100)/$cpu2['cpus'];
 		$cpu_info['load'] = number_format($load[0],2)." (1 min)  ".number_format($load[1],2)." (10 Mins)  ".number_format($load[2],2)." (15 Mins)";
 		$cpu_info['boot_time'] = get_boot_time();
 		$local = shell_exec('hostname -I');
 		$local = str_replace(' ', ', ',trim($local));
 		$all_ip =explode(',',$local);
-		if ($settings['router_ip'] == true) {
+		if (isset($settings['router_ip']) and $settings['router_ip'] == true) {
 			// get outer ip
 			//echo 'hit this'.cr;
 			//print_r($settings);
@@ -208,16 +222,28 @@ function get_cpu_info() {
 		$cpu_info['local_ip'] = $all_ip[0];
 		$cpu_info['ips'] = $local;
 		if(isset($public_ip)){
-		
 			$cpu_info['ips']="$public_ip, ".$cpu_info['ips'];
-			}
+		}
 		$cpu_info['process'] = trim(shell_exec("/bin/ps -e | wc -l"));
 		if (is_file('/var/run/reboot-required') === true) {
-			$cpu_info['reboot'] ='yes';
+			$cpu_info['reboot'] ='Yes';
 		}
 		else {
-			$cpu_info['reboot'] ='no';
+			$cpu_info['reboot'] ='No';
 		}
+		$cpu_info = array_merge($cpu_info,$cpu2);
+		//print_r($cpu_info);
+		unset($cpu_info['processor']);
+		$split_cpu = explode(' ',$cpu_info['model_name']);
+		$vx='';
+		$key = array_search('CPU', $split_cpu);
+		for ($x = 0; $x < $key; $x++) {
+			//echo "The number is: $x".cr;
+			$vx .=$split_cpu[$x].' ';
+		}
+		
+		$cpu_info['model_name'] = trim($vx);
+		$cpu_info['cpu_MHz'] = number_format($cpu_info['cpu_MHz'],2,'.','');
 		return $cpu_info;
 }
 function get_user_info () {
@@ -230,11 +256,12 @@ function get_user_info () {
     unlink("testFile");
     $user = posix_getpwuid($user_id);
 	$user['level'] =check_sudo($user['name']);
-	//print_r($user);
 	$groupid = $user['gid'];
 	$groupinfo = posix_getgrgid($groupid);
-	$user['group'] = $groupinfo;
-	if (!empty($groupinfo['members'])) {$user['members'] = $groupinfo['members'];}
+	//$user['group'] = $groupinfo;
+	if (!empty($groupinfo['members'])) {
+		$user['members'] = $groupinfo['members'];
+	}
 	$gecos = explode(',',$user['gecos']); // split data
 	unset($user['gecos']);
 	foreach ($gecos as $k => $v) {
@@ -257,39 +284,25 @@ function get_user_info () {
 		}
     //die(print_r($user));
 	exec("quota 2> /dev/null",$quota,$ret);
-	//print_r($quota);
-	//die();
-	$q_len = count($quota)-1;
-	if (isset($quota[1])){
+	if (isset($quota[3])){
 		// user has quota
-		$tmp =trim($quota[$q_len]);
-		$tmp = explode(' ',$tmp);
-		foreach ($tmp as $k => $v) {
-                if (empty(trim($v))) {
-                   unset($tmp[$k]);
-                }
-			}
-			if(is_numeric($tmp[0])) {
-                $q_len=count($quota)-2;
-                array_unshift($tmp,trim($quota[$q_len]));
-                //print_r($tmp);
-        }
-
-        $tmp = array_values($tmp);
-        // now all renumbered
-        $used = dataSize($tmp[1]*1024);
-        $total = dataSize($tmp[2]*1024);
-        $free = dataSize(($tmp[2]*1024)-($tmp[1]*1024));
-        $user['quota_used'] = $used;
-        $user['quota'] = $total; 
-        $user['quota_free'] = $free;
+		$tmp = trim($quota[3]);
+		$tmp = array_values(array_filter(explode(" ",$tmp),'strlen'));
+		$tmp[] = $tmp[1]-$tmp[0]; 
+		$user['quota_used'] = dataSize($tmp[0]*1024);
+        $user['quota_used_raw'] = $tmp[0];
+        $user['quota'] = dataSize($tmp[1]*1024);
+        $user['quota_raw'] =$tmp[1]; 
+        $user['quota_free'] = dataSize($tmp[6]*1024);
+        $user['quota_free_raw'] = $tmp[6];        
        
-}
+	}
 	else {
 			if(isset($Disk_info['home_free'])){
-				$free =floatval( $Disk_info['home_free'])+floatval($Disk_info['boot_free']).' GB';
-				$user['quota'] = $Disk_info['home_size'];	
-				$user['quota_free'] = $free;
+				$free =floatval( $Disk_info['home_free']);
+				$user['quota'] = $Disk_info['root_size'];
+				$user['quota_used'] = $Disk_info['root_used']; 	
+				$user['quota_free'] = $Disk_info['root_free'];
 				$user['disk_locations'] = 2;
 			}
 			else {
@@ -353,34 +366,39 @@ function getVersion($app, $apt=false) {
 			if ($x) {
 				$dbtype = ' (MariaDB)';
 			}
-		}		
+			
+		}
+		 else if ($app == 'tmpreaper') {
+             shell_exec('tmpreaper 2> tr.txt');
+             $output = file_get_contents('tr.txt');
+             unlink('tr.txt');
+        }
+		
 			else{
 				$output = shell_exec($app. '  2> /dev/null'); 
 			}
-		} 
-  preg_match('@[0-9]+\.[0-9]+\.[0-9]+@', $output, $version);
-  //echo 'try 1 '.print_r($version,true).cr;
-  if (empty($version[0])) {
-		
-		preg_match('@[0-9]+\.[0-9]+@', $output, $version);
-		//echo 'try 2 '.print_r($version,true).cr;
+		}
+	if(!empty($output)) {	 
+		preg_match('@[0-9]+\.[0-9]+\.[0-9]+@', $output, $version);
+		//echo 'try 1 '.print_r($version,true).cr;
+		if (empty($version[0])) {
+			preg_match('@[0-9]+\.[0-9]+@', $output, $version);
+			//echo 'try 2 '.print_r($version,true).cr;
+		}
+		if (empty($version[0])) {
+	   	    preg_match('@[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+@', $output, $version);
+			//echo 'try 3 '.print_r($version,true).cr; 
+		}
+		if (!empty($version[0])) {
+		return $version[0].$dbtype; 
+		}
+		else {
+			//echo $app.PHP_EOL;
+			//print_r($version);
+			return 'Not Installed';
+		}
 	}
-  if (empty($version[0])) {
-	   
-	    preg_match('@[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+@', $output, $version);
-	    //echo 'try 3 '.print_r($version,true).cr; 
-   }
-   
- 
-  if (!empty($version[0])) {
-	
-  return $version[0].$dbtype; 
-}
-else {
-	//echo $app.PHP_EOL;
-	//print_r($version);
-	return 'Not Installed';
-}
+	return 'Not Installed';	
 }
 function get_software_info($database) {
 	/* return software info as array
@@ -449,34 +467,38 @@ function get_disk_info() {
 	/* return disk info as array
 	//echo 'root stuff ! or no quota !'.cr;
 	*/ 
-exec('df -h /',$root,$ret); //need this for sdd or sep system partition
+exec('df  /',$root,$ret); //need this for sdd or sep system partition
 unset ($root[0]);
 $root = array_values($root);
 $root = array_values(array_filter(preg_split('/(\s)/', $root[0])));
-exec('df -h /home',$home,$ret); //got the stuff
+exec('df  /home',$home,$ret); //got the stuff
 unset($home[0]);
 $home = array_values($home);
 $home = array_values(array_filter(preg_split('/(\s)/', $home[0])));
-exec('df -h /boot',$boot,$ret); //got the stuff
-unset($boot[0]);
-$boot = array_values($boot);
+exec('df  |grep boot',$boot,$ret); //got the stuff
+//print_r($boot);
+//unset($boot[0]);
+//$boot = array_values($boot);
 //$home = explode("   ",$home[0]);
 $boot = array_values(array_filter(preg_split('/(\s)/', $boot[0])));
 if($home[0] == $root[0]) {
 	//$home matches $root
-	unset($home);
+	//unset($home);
 	}
 if($boot == $root) {
 	//$boot matches $root;
-	unset($root);
+	//unset($root);
 	}
 
 //die();
 	if(isset($root)) {
 		$disk_info['root_filesystem'] = trim($root[0]);
-		$disk_info['root_size'] = trim($root[1]);
-		$disk_info['root_used'] = trim($root[2]);
-		$disk_info['root_free'] = trim($root[3]);
+		$disk_info['root_size'] = dataSize(floatval($root[1]) *1024);
+		$disk_info['root_size_raw'] = trim($root[1]);
+		$disk_info['root_used'] = dataSize(floatval($root[2])*1024);
+		$disk_info['root_used_raw'] = trim($root[2]);
+		$disk_info['root_free'] = dataSize(floatval($root[3])*1024);
+		$disk_info['root_free_raw'] = trim($root[3]);
 		$disk_info['root_pc'] = trim($root[4]);
 		$disk_info['root_mount'] = trim($root[5]);
 	}
@@ -484,18 +506,24 @@ if($boot == $root) {
 	if(isset($home)) {
 		//echo 'oh home is set'.cr;
 		$disk_info['home_filesystem'] = trim($home[0]);
-		$disk_info['home_size'] = trim($home[1]);
-		$disk_info['home_used'] = trim($home[2]);
-		$disk_info['home_free'] = trim($home[3]);
+		$disk_info['home_size'] = dataSize(floatval($home[1])*1024);
+		$disk_info['home_size_raw'] = trim($home[1]);
+		$disk_info['home_used'] = dataSize(floatval($home[2])*1024);
+		$disk_info['home_used_raw'] = trim($home[2]);
+		$disk_info['home_free'] = dataSize(floatval($home[3])*1024);
+		$disk_info['home_free_raw'] = trim($home[3]);
 		$disk_info['home_pc'] = trim($home[4]);
 		$disk_info['home_mount'] = trim($home[5]);
 	}
 	if(isset($boot)) {
 		//echo 'oh home is set'.cr;
 		$disk_info['boot_filesystem'] = trim($boot[0]);
-		$disk_info['boot_size'] = trim($boot[1]);
-		$disk_info['boot_used'] = trim($boot[2]);
-		$disk_info['boot_free'] = trim($boot[3]);
+		$disk_info['boot_size'] = dataSize(floatval($boot[1])*1024);
+		$disk_info['boot_size_raw'] = trim($boot[1]);
+		$disk_info['boot_used'] = dataSize(floatval($boot[2])*1024);
+		$disk_info['boot_used_raw'] = trim($boot[2]);
+		$disk_info['boot_free'] = dataSize(floatval($boot[3])*1024);
+		$disk_info['boot_free_raw'] = trim($boot[3]);
 		$disk_info['boot_pc'] = trim($boot[4]);
 		$disk_info['boot_mount'] = trim($boot[5]);
 	}
@@ -855,7 +883,7 @@ foreach ($res as $data) {
 	$info = $Query->GetInfo();
 	$rules = $Query->GetRules( );
 	$Query->Disconnect( );
-	print_r($info);
+	//print_r($info);
 	
 	}
 	require_once('GameQ/Autoloader.php'); //load GameQ

@@ -30,11 +30,10 @@ require (DOC_ROOT.'/includes/master.inc.php');
 require DOC_ROOT.'/includes/class.emoji.php';
 require DOC_ROOT.'/includes/class.steamid.php';
 $version = "1.01";
-define("VERSION",$version);
-
-$build = "17211-1608133526";
-
-    $shortopts ="i:s:v::";
+$time = "1639826920";
+$build = "17137-2963110465";
+define ('VERSION',$version);
+    $shortopts ="i:s:v::a:";
 	$longopts[]="debug::";
 	$longopts[]="help::";
 	$longopts[]="quick::";
@@ -108,13 +107,15 @@ echo 'wrong enviroment';
 exit;
 }
 //if(dryrun){die('dry run set'.cr);}
-if(empty($options['s'])) {
+if(empty($options['s']) or empty($options['a'])) {
 	echo "$prog v$version - $build © NoIdeer Software ".date('Y').cr;
 	if (!isset(options['help'])) {
-		echo 'Please supply a Server to scan'.cr;
+		echo 'Invalid Options set'.cr;
 	}
+	
 	echo 'Examples :- '.cr."\t".$prog.' -s<server id>'.cr;
 	echo "\t$prog -s<server id> -i<file to import> do not use -i with the all server option it is used for importing data and \e[4mnot\e[0m scanning".cr;
+	echo "\t$prog -a<api server> Required you must add the api server to scan".cr;
 	echo "\t$prog -s<all> this will scan all servers using the default log(s), slow but thorough ".cr;
 	//echo "\t--quick scans the current steam log rather than the full log faster but not so thorough, works with all other options".cr;
 	echo "\t--debug logs technical details to the console, works with all other options".cr;
@@ -131,7 +132,7 @@ if ($file == 'all') {
 	    if(isset($options['i'] )) {
 			die( 'Error  -i can not be set if -s is set to all'.cr);
 		}
-		$game_sql = 'SELECT * FROM `server1` where  running="1" order by host_name ASC';
+		$game_sql = 'SELECT * FROM `server1` where  running="1" and fname = "'.$options['a'].'" order by host_name ASC';
 		$game_results = $database->get_results($game_sql);
 		$display='';
 	
@@ -144,7 +145,11 @@ if ($file == 'all') {
 			
 		}
 		else {
-			$path = $run['url'].':'.$run['bport'].'/ajaxv2.php?action=get_file&file='.$run['location'].'/log/console/'.$run['host_name'].'-console.log'; //used for screen log
+			$logfile = $run['location'].'/log/console/'.$run['host_name'].'-console.log';
+			$secure = $run['url'].':'.$run['bport'].'/ajax_send.php';
+			$exe = '?url='.$run['url'].':'.$run['bport']."/ajaxv2.php&query=action=get_file:file=$logfile&output=";
+			$path = $secure.$exe;
+			//$path = $run['url'].':'.$run['bport']."/ajaxv2.php?action=get_file&file=$logfile"; //used for screen log
 					}
 		$tmp = geturl($path);
 		if(debug) {
@@ -166,11 +171,7 @@ if ($file == 'all') {
 				echo 'no output'.cr;
 			}
 	}
-	//if(debug) {
-		//echo $display;
-	//}
-	//else {
-		
+	
 		if(!empty(trim($display))) {
 			if(isset($options['no-email'])) {
 				echo $display;
@@ -195,7 +196,7 @@ if ($file == 'all') {
 				}
 			}
 		}
-	//}
+
 }
 else {
 	// do supplied file
@@ -267,7 +268,7 @@ function scan_log($server,$data) {
 		// save output
 		$log_line=trim($log_line);
 		$tmp = user_data($log_line);
-		$users[] = $tmp;
+		$users[$tmp['name']] = $tmp;
 		
 	}
 	
@@ -504,7 +505,7 @@ function update_server($server){
 	$cmd = $stub.'q';
 	$s .= geturl($cmd).cr; // stopped server
 	// need to check if this is a root install, if so elevate the privs  TODO update app version number 
-	$exe = urlencode("sudo $steamcmd  +force_install_dir +login anonymous ".$game['install_dir'].' +app_update '.$game['server_id'].' +quit');
+	$exe = urlencode("sudo $steamcmd  +force_install_dir ".$game['install_dir']." +login anonymous +app_update ".$game['server_id'].' +quit');
 	$cmd = $game['url'].':'.$game['bport'].'/ajaxv2.php?action=exe&cmd='.$exe.'&debug=true';
 	$s .=geturl($cmd);
 	//echo 'updated server using '.$cmd.cr;
